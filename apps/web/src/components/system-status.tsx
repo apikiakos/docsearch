@@ -12,6 +12,12 @@ type ServiceStatus = {
   url?: string;
   error?: string;
   lastChecked: string;
+  metrics?: {
+    documents?: number;
+    messages?: number;
+    manifest_entries?: number;
+    cache_entries?: number;
+  };
 };
 
 const SERVICE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -159,6 +165,35 @@ export function SystemStatus() {
                     <p className="text-xs text-destructive bg-destructive/10 p-2 rounded break-all">
                       {service.error}
                     </p>
+                  </div>
+                )}
+
+                {service.metrics && (
+                  <div className="space-y-1">
+                    {service.metrics.documents !== undefined && (
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium text-muted-foreground">Documents</p>
+                        <p className="text-xs font-semibold">{service.metrics.documents.toLocaleString()}</p>
+                      </div>
+                    )}
+                    {service.metrics.messages !== undefined && (
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium text-muted-foreground">Queue Messages</p>
+                        <p className="text-xs font-semibold">{service.metrics.messages.toLocaleString()}</p>
+                      </div>
+                    )}
+                    {service.metrics.manifest_entries !== undefined && (
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium text-muted-foreground">Manifest Entries</p>
+                        <p className="text-xs font-semibold">{service.metrics.manifest_entries.toLocaleString()}</p>
+                      </div>
+                    )}
+                    {service.metrics.cache_entries !== undefined && (
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium text-muted-foreground">Cache Entries</p>
+                        <p className="text-xs font-semibold">{service.metrics.cache_entries.toLocaleString()}</p>
+                      </div>
+                    )}
                   </div>
                 )}
 

@@ -10,6 +10,12 @@ type ServiceStatus = {
   url?: string;
   error?: string;
   lastChecked: string;
+  metrics?: {
+    documents?: number;
+    messages?: number;
+    manifest_entries?: number;
+    cache_entries?: number;
+  };
 };
 
 export async function GET() {
@@ -26,14 +32,29 @@ export async function GET() {
   const services: ServiceStatus[] = [];
   const now = new Date().toISOString();
 
-  // Check PostgreSQL
+  // Check PostgreSQL and get file_manifest count
   try {
     await prisma.$queryRaw`SELECT 1`;
+    
+    // Get file_manifest table count
+    let manifestCount = 0;
+    try {
+      const result = await prisma.$queryRaw<Array<{ count: bigint }>>`
+        SELECT COUNT(*) as count FROM file_manifest
+      `;
+      manifestCount = Number(result[0]?.count || 0);
+    } catch {
+      manifestCount = 0;
+    }
+    
     services.push({
       name: "PostgreSQL",
       status: "running",
       url: process.env.DATABASE_URL?.replace(/:[^:@]+@/, ":****@") || "Not configured",
       lastChecked: now,
+      metrics: {
+        manifest_entries: manifestCount,
+      },
     });
   } catch (error) {
     services.push({
@@ -42,17 +63,38 @@ export async function GET() {
       url: process.env.DATABASE_URL?.replace(/:[^:@]+@/, ":****@") || "Not configured",
       error: error instanceof Error ? error.message : "Connection failed",
       lastChecked: now,
+      metrics: {
+        manifest_entries: 0,
+      },
     });
   }
 
-  // Check Elasticsearch
+  // Check Elasticsearch and get document count
   try {
     await elasticsearch.ping();
+    
+    // Get total document count across all tenant indexes
+    let totalDocs = 0;
+    try {
+      const countResult = await elasticsearch.count({
+        index: "docs_*",
+      });
+      totalDocs = typeof countResult.count === "number" 
+        ? countResult.count 
+        : 0;
+    } catch {
+      // If we can't get counts, just set to 0
+      totalDocs = 0;
+    }
+    
     services.push({
       name: "Elasticsearch",
       status: "running",
       url: process.env.ELASTICSEARCH_URL || "http://localhost:9200",
       lastChecked: now,
+      metrics: {
+        documents: totalDocs,
+      },
     });
   } catch (error) {
     services.push({
@@ -61,17 +103,33 @@ export async function GET() {
       url: process.env.ELASTICSEARCH_URL || "http://localhost:9200",
       error: error instanceof Error ? error.message : "Connection failed",
       lastChecked: now,
+      metrics: {
+        documents: 0,
+      },
     });
   }
 
-  // Check Redis
+  // Check Redis and get cache entry count
   try {
     await redis.ping();
+    
+    // Count cache entries (keys matching search:* pattern)
+    let cacheCount = 0;
+    try {
+      const keys = await redis.keys("search:*");
+      cacheCount = keys.length;
+    } catch {
+      cacheCount = 0;
+    }
+    
     services.push({
       name: "Redis",
       status: "running",
       url: process.env.REDIS_URL?.replace(/:[^:@]+@/, ":****@") || "redis://localhost:6379",
       lastChecked: now,
+      metrics: {
+        cache_entries: cacheCount,
+      },
     });
   } catch (error) {
     services.push({
@@ -80,42 +138,69 @@ export async function GET() {
       url: process.env.REDIS_URL?.replace(/:[^:@]+@/, ":****@") || "redis://localhost:6379",
       error: error instanceof Error ? error.message : "Connection failed",
       lastChecked: now,
+      metrics: {
+        cache_entries: 0,
+      },
     });
   }
 
-  // Check RabbitMQ
+  // Check RabbitMQ and get queue message count
   try {
     const rabbitmqUrl = process.env.RABBITMQ_URL || "http://localhost:15672";
     const rabbitmqUser = process.env.RABBITMQ_USER || "guest";
     const rabbitmqPass = process.env.RABBITMQ_PASS || "guest";
+    const queueName = "doc_ingest";
     
-    // Check RabbitMQ management API
+    // Check RabbitMQ management API and get queue info
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
     
     try {
-      const response = await fetch(`${rabbitmqUrl}/api/overview`, {
+      // First check overview
+      const overviewResponse = await fetch(`${rabbitmqUrl}/api/overview`, {
         headers: {
           Authorization: `Basic ${Buffer.from(`${rabbitmqUser}:${rabbitmqPass}`).toString("base64")}`,
         },
         signal: controller.signal,
       });
 
+      if (!overviewResponse.ok) {
+        throw new Error(`HTTP ${overviewResponse.status}`);
+      }
+
+      // Get queue message count
+      let messageCount = 0;
+      try {
+        const queueResponse = await fetch(`${rabbitmqUrl}/api/queues/%2F/${queueName}`, {
+          headers: {
+            Authorization: `Basic ${Buffer.from(`${rabbitmqUser}:${rabbitmqPass}`).toString("base64")}`,
+          },
+          signal: controller.signal,
+        });
+
+        if (queueResponse.ok) {
+          const queueInfo = await queueResponse.json();
+          messageCount = queueInfo.messages || 0;
+        }
+      } catch (queueError) {
+        // Queue might not exist yet, that's okay
+        messageCount = 0;
+      }
+
       clearTimeout(timeoutId);
 
-      if (response.ok) {
-        const displayUrl = rabbitmqUrl.includes("@")
-          ? rabbitmqUrl.replace(/:[^:@]+@/, ":****@")
-          : rabbitmqUrl;
-        services.push({
-          name: "RabbitMQ",
-          status: "running",
-          url: displayUrl,
-          lastChecked: now,
-        });
-      } else {
-        throw new Error(`HTTP ${response.status}`);
-      }
+      const displayUrl = rabbitmqUrl.includes("@")
+        ? rabbitmqUrl.replace(/:[^:@]+@/, ":****@")
+        : rabbitmqUrl;
+      services.push({
+        name: "RabbitMQ",
+        status: "running",
+        url: displayUrl,
+        lastChecked: now,
+        metrics: {
+          messages: messageCount,
+        },
+      });
     } catch (fetchError) {
       clearTimeout(timeoutId);
       throw fetchError;
@@ -128,6 +213,9 @@ export async function GET() {
       url: displayUrl,
       error: error instanceof Error ? error.message : "Connection failed",
       lastChecked: now,
+      metrics: {
+        messages: 0,
+      },
     });
   }
 

@@ -119,3 +119,19 @@ model VerificationToken {
   @@unique([identifier, token])
   @@map("verification_tokens")
 }
+
+model FileManifest {
+  id             Int      @id @default(autoincrement())
+  tenantId       String
+  path           String
+  documentId     String
+  lastMtime      DateTime
+  sizeBytes      BigInt
+  contentHash    String?  // Optional SHA-256 hash
+  lastIndexedAt  DateTime @default(now())
+  isDeleted      Boolean  @default(false)
+
+  @@unique([tenantId, path])
+  @@index([tenantId, isDeleted])
+  @@map("file_manifest")
+}

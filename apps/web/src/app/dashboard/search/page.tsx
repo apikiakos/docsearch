@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
+import { SearchMetrics } from "@/components/search-metrics";
 
 type SearchResult = {
   id: string;
@@ -60,6 +61,19 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
   const [userTenants, setUserTenants] = useState<Array<{ slug: string; name: string }>>([]);
+  const [metrics, setMetrics] = useState<{
+    apiStart?: number;
+    authTime?: number;
+    tenantResolutionTime?: number;
+    cacheCheckTime?: number;
+    elasticsearchTime?: number;
+    elasticsearchTook?: number;
+    processingTime?: number;
+    totalTime?: number;
+    cached?: boolean;
+    browserToApi?: number;
+    apiToBrowser?: number;
+  } | null>(null);
 
   // Fetch user's accessible tenants
   useEffect(() => {
@@ -97,18 +111,37 @@ export default function SearchPage() {
 
   const performSearch = async (searchQuery: string, searchTenant: string) => {
     setLoading(true);
+    setMetrics(null);
+    const browserStart = performance.now();
+    
     try {
       const params = new URLSearchParams({
         q: searchQuery,
-        tenant: searchTenant,
+        // Admin searches all tenants by default (empty tenant param)
+        // Only filter if a specific tenant is selected
+        ...(searchTenant && { tenant: searchTenant }),
       });
 
+      const fetchStart = performance.now();
       const response = await fetch(`/api/search?${params}`);
+      const fetchEnd = performance.now();
+      const browserToApi = fetchStart - browserStart;
+      const apiToBrowser = performance.now() - fetchEnd;
+
       if (response.ok) {
         const data = await response.json();
         setResults(data.results || []);
         setFacets(data.facets || []);
         setTotal(typeof data.total === "object" ? data.total.value : data.total || 0);
+        
+        // Combine browser and API metrics
+        if (data.metrics) {
+          setMetrics({
+            ...data.metrics,
+            browserToApi,
+            apiToBrowser,
+          });
+        }
       }
     } catch (error) {
       console.error("Error searching:", error);
@@ -178,21 +211,24 @@ export default function SearchPage() {
 
         {!loading && query && results.length > 0 && (
           <div className="space-y-4">
-            {/* Facet Statistics */}
-            {facets.length > 0 && (
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium">File Types:</span>
-                    {facets.map((facet) => (
-                      <Badge key={facet.type} variant="secondary" className="text-xs">
-                        {facet.type}: {facet.count}
-                      </Badge>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            {/* Facet Statistics and Metrics */}
+            <div className="grid gap-4 md:grid-cols-3">
+              {facets.length > 0 && (
+                <Card className="md:col-span-2">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium">File Types:</span>
+                      {facets.map((facet) => (
+                        <Badge key={facet.type} variant="secondary" className="text-xs">
+                          {facet.type}: {facet.count}
+                        </Badge>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+              {metrics && <SearchMetrics metrics={metrics} />}
+            </div>
 
             {/* Results Summary */}
             <p className="text-sm text-muted-foreground">

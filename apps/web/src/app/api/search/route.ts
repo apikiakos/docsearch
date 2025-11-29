@@ -27,8 +27,22 @@ function getFileType(metadata: Record<string, unknown> | undefined): string {
 }
 
 export async function GET(request: Request) {
+  const startTime = performance.now();
+  const metrics = {
+    apiStart: startTime,
+    authTime: 0,
+    tenantResolutionTime: 0,
+    cacheCheckTime: 0,
+    elasticsearchTime: 0,
+    processingTime: 0,
+    totalTime: 0,
+  };
+
   try {
+    const authStart = performance.now();
     const user = await requireAuth();
+    metrics.authTime = performance.now() - authStart;
+
     const url = new URL(request.url);
     const q = url.searchParams.get("q") ?? "";
     const tenantSlug = url.searchParams.get("tenant") || url.searchParams.get("tenantId") || "";
@@ -38,13 +52,15 @@ export async function GET(request: Request) {
     }
 
     // Get accessible tenants
+    const tenantStart = performance.now();
     const accessibleTenants = await getUserAccessibleTenants(user);
+    metrics.tenantResolutionTime = performance.now() - tenantStart;
 
     if (accessibleTenants.length === 0) {
       return NextResponse.json({ error: "No accessible tenants" }, { status: 403 });
     }
 
-    // Determine which tenants to search
+    // Determine which tenants to search - admin searches all by default
     let tenantsToSearch: string[] = [];
     if (tenantSlug) {
       if (!hasTenantAccess(user, tenantSlug)) {
@@ -55,6 +71,7 @@ export async function GET(request: Request) {
       }
       tenantsToSearch = [tenantSlug];
     } else {
+      // Default: search all accessible tenants (admin gets all tenants)
       tenantsToSearch = accessibleTenants;
     }
 
@@ -72,18 +89,28 @@ export async function GET(request: Request) {
     }
 
     // Check cache
+    const cacheStart = performance.now();
     const cacheKey = getSearchCacheKey(tenantsToSearch.join(","), q);
     const cached = await redis.get(cacheKey);
+    metrics.cacheCheckTime = performance.now() - cacheStart;
+    
     if (cached) {
+      const cachedData = JSON.parse(cached);
+      metrics.totalTime = performance.now() - startTime;
       return NextResponse.json({
-        ...JSON.parse(cached),
+        ...cachedData,
         cached: true,
+        metrics: {
+          ...metrics,
+          cached: true,
+        },
       });
     }
 
     // Search across all accessible tenants
     const indexPattern = tenantsToSearch.map((t) => getTenantIndex(t)).join(",");
     
+    const esStart = performance.now();
     const searchResult = await elasticsearch.search({
       index: indexPattern,
       query: {
@@ -113,14 +140,17 @@ export async function GET(request: Request) {
           terms: {
             field: "metadata.mime",
             size: 20,
+            missing: "unknown",
           },
         },
       },
       size: 100, // Get more results for datatable
       sort: [{ _score: { order: "desc" } }], // Sort by Elasticsearch score
     });
+    metrics.elasticsearchTime = performance.now() - esStart;
 
     // Process file type facets
+    const processStart = performance.now();
     const fileTypeFacets: Record<string, number> = {};
     
     if (searchResult.aggregations) {
@@ -183,6 +213,9 @@ export async function GET(request: Request) {
       }))
       .sort((a, b) => b.count - a.count);
 
+    metrics.processingTime = performance.now() - processStart;
+    metrics.totalTime = performance.now() - startTime;
+
     const responseData = {
       results,
       facets,
@@ -190,10 +223,16 @@ export async function GET(request: Request) {
         ? searchResult.hits.total.value 
         : searchResult.hits.total || 0,
       cached: false,
+      metrics: {
+        ...metrics,
+        elasticsearchTook: searchResult.took || 0, // ES internal timing
+      },
     };
 
-    // Cache results for 5 minutes
-    await redis.setex(cacheKey, 300, JSON.stringify(responseData));
+    // Cache results for 5 minutes (without metrics for consistency)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { metrics: _metrics, ...dataToCache } = responseData;
+    await redis.setex(cacheKey, 300, JSON.stringify(dataToCache));
 
     return NextResponse.json(responseData);
   } catch (error: unknown) {
