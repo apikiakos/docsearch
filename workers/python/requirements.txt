@@ -1,0 +1,7 @@
+boto3
+pika
+python-magic
+pdfminer.six
+elasticsearch
+beautifulsoup4
+python-docx
