@@ -18,14 +18,9 @@ const navigation = [
     icon: LayoutDashboard,
   },
   {
-    name: "Search",
-    href: "/dashboard/search",
-    icon: Search,
-  },
-  {
     name: "Documents",
     href: "/dashboard/documents",
-    icon: FileText,
+    icon: Search,
   },
   {
     name: "Settings",

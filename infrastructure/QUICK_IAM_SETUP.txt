@@ -1,0 +1,37 @@
+QUICK IAM USER SETUP FOR DISTRIBUTED-DOCSEARCH-PROTOTYPE
+========================================================
+
+1. AWS Console → IAM → Users → Create user
+   - Name: docsearch-prototype-user
+   - UNCHECK "Provide user access to the AWS Management Console"
+   - Click Next
+
+2. Set Permissions:
+   - Select "Attach policies directly"
+   - Click "Create policy" → JSON tab
+   - Copy/paste contents from: infrastructure/iam-policy.json
+   - Name: DocSearchPrototypePolicy
+   - Create policy
+   - Back to user creation, refresh, select the policy
+   - Click Next → Create user
+
+3. Create Access Keys:
+   - Click on the user → Security credentials tab
+   - Access keys → Create access key
+   - Use case: Command Line Interface (CLI)
+   - Create access key
+   - COPY BOTH KEYS (you won't see secret again!)
+
+4. Update .env file:
+   AWS_ACCESS_KEY_ID="AKIA...your-key"
+   AWS_SECRET_ACCESS_KEY="your-secret-key"
+   AWS_DEFAULT_REGION="eu-west-1"
+   AWS_S3_BUCKET="document-search-tenants"
+
+5. Test:
+   aws sts get-caller-identity
+
+6. Deploy:
+   ./infrastructure/deploy-s3.sh
+
+See infrastructure/IAM_SETUP.md for detailed instructions.

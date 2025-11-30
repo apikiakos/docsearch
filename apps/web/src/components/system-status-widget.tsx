@@ -28,6 +28,14 @@ const SERVICE_ICONS: Record<string, React.ComponentType<{ className?: string }>>
   RabbitMQ: Layers, // Layers icon for RabbitMQ (message queue/stack)
 };
 
+// Logical flow order: Database -> Message Queue -> Search Engine -> Cache
+const SERVICE_ORDER: Record<string, number> = {
+  PostgreSQL: 1,    // Database: stores user/tenant data and file manifest
+  RabbitMQ: 2,      // Message Queue: receives document ingestion jobs
+  Elasticsearch: 3, // Search Engine: indexes and searches documents
+  Redis: 4,         // Cache: caches search results and rate limiting
+};
+
 const STATUS_VARIANTS: Record<string, "default" | "destructive" | "secondary"> = {
   running: "default",
   stopped: "destructive",
@@ -73,7 +81,13 @@ function SystemStatusContent() {
 
   return (
     <div className="flex items-center gap-2">
-      {services.map((service) => {
+      {services
+        .sort((a, b) => {
+          const orderA = SERVICE_ORDER[a.name] || 999;
+          const orderB = SERVICE_ORDER[b.name] || 999;
+          return orderA - orderB;
+        })
+        .map((service) => {
         const Icon = SERVICE_ICONS[service.name] || Database;
         const variant = STATUS_VARIANTS[service.status] || "secondary";
         const statusText = `${service.name} ${service.status}`;

@@ -1,0 +1,8 @@
+Distributed document search systems require careful architecture.
+
+Key components include:
+1. Message queues for async processing
+2. Search engines for full-text indexing
+3. Databases for metadata storage
+
+The system uses Elasticsearch for search, RabbitMQ for queuing, and PostgreSQL for persistence.

@@ -1,0 +1,104 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'S3 Bucket and folder structure for distributed docsearch prototype'
+
+Parameters:
+  BucketName:
+    Type: String
+    Description: Name of the S3 bucket
+    Default: docsearch-prototype-bucket
+  
+  Region:
+    Type: String
+    Description: AWS region for the bucket
+    Default: us-east-1
+  
+  Tenant1Name:
+    Type: String
+    Description: Name of the first tenant
+    Default: s3-tenant-1
+  
+  Tenant2Name:
+    Type: String
+    Description: Name of the second tenant
+    Default: s3-tenant-2
+
+Resources:
+  # S3 Bucket
+  DocSearchBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldVersions
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 30
+      Tags:
+        - Key: Project
+          Value: distributed-docsearch-prototype
+        - Key: Environment
+          Value: development
+
+  # Bucket Policy (allow read/write for authenticated users)
+  DocSearchBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DocSearchBucket
+      PolicyDocument:
+        Statement:
+          - Sid: AllowAuthenticatedAccess
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+              - s3:ListBucket
+            Resource:
+              - !Sub '${DocSearchBucket}/*'
+              - !GetAtt DocSearchBucket.Arn
+
+  # Note: Folder structure is created implicitly when files are uploaded
+  # S3 doesn't have folders, but we can create placeholder objects using a Custom Resource
+  # For simplicity, we'll create the folder structure after stack creation
+  # The seeding script will create the folders when uploading files
+
+Outputs:
+  BucketName:
+    Description: Name of the created S3 bucket
+    Value: !Ref DocSearchBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-BucketName'
+  
+  BucketArn:
+    Description: ARN of the created S3 bucket
+    Value: !GetAtt DocSearchBucket.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-BucketArn'
+  
+  BucketDomainName:
+    Description: Domain name of the bucket
+    Value: !GetAtt DocSearchBucket.RegionalDomainName
+    Export:
+      Name: !Sub '${AWS::StackName}-BucketDomainName'
+  
+  Tenant1Path:
+    Description: S3 path for tenant 1
+    Value: !Sub 's3://${DocSearchBucket}/${Tenant1Name}/'
+  
+  Tenant2Path:
+    Description: S3 path for tenant 2
+    Value: !Sub 's3://${DocSearchBucket}/${Tenant2Name}/'
+

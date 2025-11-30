@@ -1,14 +1,28 @@
 """Producer: Scans folder for documents, detects changes, and sends to RabbitMQ"""
 import json
+import os
 import sys
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 import pika
 
 from manifest import ManifestDB
 from fingerprint import make_document_id, compute_file_fingerprint, has_file_changed
+from mime_detector import detect_mime_type
 
-RABBITMQ_URL = "amqp://guest:guest@localhost:5672/"
+# Load environment variables from root .env file
+try:
+    from dotenv import load_dotenv
+    # Load from root .env (two levels up from workers/python)
+    root_dir = Path(__file__).parent.parent.parent
+    env_path = root_dir / ".env"
+    if env_path.exists():
+        load_dotenv(env_path)
+except ImportError:
+    # python-dotenv not installed, use environment variables directly
+    pass
+
+RABBITMQ_URL = os.environ.get("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
 QUEUE_NAME = "doc_ingest"
 
 
@@ -27,21 +41,7 @@ def discover_files(root: Path):
             yield path
 
 
-def get_mime_type(file_path: Path) -> str:
-    """Simple MIME type detection from extension."""
-    ext = file_path.suffix.lower()
-    mime_map = {
-        ".txt": "text/plain",
-        ".md": "text/markdown",
-        ".markdown": "text/markdown",
-        ".pdf": "application/pdf",
-        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        ".doc": "application/msword",
-        ".html": "text/html",
-        ".htm": "text/html",
-        ".csv": "text/csv",
-    }
-    return mime_map.get(ext, "application/octet-stream")
+# Removed get_mime_type - now using detect_mime_type from mime_detector
 
 
 def scan_folder(root: Path, tenant_id: str, db: ManifestDB, channel):
@@ -71,7 +71,7 @@ def scan_folder(root: Path, tenant_id: str, db: ManifestDB, channel):
             if manifest is None:
                 # New file
                 document_id = make_document_id(tenant_id, path_str)
-                mime = get_mime_type(file_path)
+                mime = detect_mime_type(file_path)
 
                 # Insert into manifest
                 db.insert_manifest(
@@ -85,6 +85,14 @@ def scan_folder(root: Path, tenant_id: str, db: ManifestDB, channel):
                     "document_id": document_id,
                     "path": path_str,
                     "mime": mime,
+                    "metadata": {
+                        "filename": file_path.name,
+                        "mime": mime,
+                        "source": "local_folder",
+                        "source_url": path_str,  # Local file path
+                        "type": "document",
+                        "originalUrl": path_str,  # For preview/display
+                    },
                 }
 
                 channel.basic_publish(
@@ -117,7 +125,7 @@ def scan_folder(root: Path, tenant_id: str, db: ManifestDB, channel):
                 ):
                     # File changed - reindex
                     document_id = manifest.get("documentId") or manifest.get("document_id")
-                    mime = get_mime_type(file_path)
+                    mime = detect_mime_type(file_path)
 
                     # Update manifest
                     db.update_manifest(
@@ -132,6 +140,14 @@ def scan_folder(root: Path, tenant_id: str, db: ManifestDB, channel):
                         "document_id": document_id,
                         "path": path_str,
                         "mime": mime,
+                        "metadata": {
+                            "filename": file_path.name,
+                            "mime": mime,
+                            "source": "local_folder",
+                            "source_url": path_str,  # Local file path
+                            "type": "document",
+                            "originalUrl": path_str,  # For preview/display
+                        },
                         "producer_scan_time": enqueue_start - scan_start,
                         "producer_timestamp": datetime.now(timezone.utc).isoformat(),
                     }

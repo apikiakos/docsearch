@@ -28,6 +28,7 @@ type Tenant = {
   createdAt: string;
   updatedAt: string;
   memberCount: number;
+  documentCount: number;
 };
 
 type Pagination = {
@@ -159,6 +160,7 @@ export function TenantsTable() {
                 <SortButton column="name">Name</SortButton>
               </TableHead>
               <TableHead>Members</TableHead>
+              <TableHead>Documents</TableHead>
               <TableHead>
                 <SortButton column="createdAt">Created</SortButton>
               </TableHead>
@@ -167,7 +169,7 @@ export function TenantsTable() {
           <TableBody>
             {tenants.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="h-24 text-center">
+                <TableCell colSpan={5} className="h-24 text-center">
                   No tenants found.
                 </TableCell>
               </TableRow>
@@ -181,6 +183,7 @@ export function TenantsTable() {
                   <TableCell className="font-medium">{tenant.slug}</TableCell>
                   <TableCell>{tenant.name}</TableCell>
                   <TableCell>{tenant.memberCount}</TableCell>
+                  <TableCell>{tenant.documentCount.toLocaleString()}</TableCell>
                   <TableCell>
                     {new Date(tenant.createdAt).toLocaleDateString()}
                   </TableCell>

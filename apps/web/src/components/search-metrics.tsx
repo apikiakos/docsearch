@@ -16,6 +16,9 @@ type SearchMetrics = {
   cached?: boolean;
   browserToApi?: number;
   apiToBrowser?: number;
+  fuzzySearchUsed?: boolean;
+  exactSearchMetrics?: { time: number; took: number; hits: number } | null;
+  fuzzySearchMetrics?: { time: number; took: number; hits: number } | null;
 };
 
 interface SearchMetricsProps {
@@ -111,6 +114,58 @@ export function SearchMetrics({ metrics, className }: SearchMetricsProps) {
               )}
             </div>
           </div>
+          
+          {/* Exact Search Metrics */}
+          {metrics.exactSearchMetrics && (
+            <div className="pl-5 space-y-1 border-l-2 border-blue-200 dark:border-blue-800">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Exact Search</span>
+                <span className="font-mono text-muted-foreground">
+                  {formatTime(metrics.exactSearchMetrics.time)}
+                </span>
+              </div>
+              {metrics.exactSearchMetrics.took > 0 && (
+                <div className="flex items-center justify-between text-xs pl-2">
+                  <span className="text-muted-foreground/70">ES took</span>
+                  <span className="font-mono text-muted-foreground/70">
+                    {formatTime(metrics.exactSearchMetrics.took)}
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center justify-between text-xs pl-2">
+                <span className="text-muted-foreground/70">Hits</span>
+                <span className="font-mono text-muted-foreground/70">
+                  {metrics.exactSearchMetrics.hits}
+                </span>
+              </div>
+            </div>
+          )}
+          
+          {/* Fuzzy Search Metrics */}
+          {metrics.fuzzySearchUsed && metrics.fuzzySearchMetrics && (
+            <div className="pl-5 space-y-1 border-l-2 border-orange-200 dark:border-orange-800">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Fuzzy Search</span>
+                <span className="font-mono text-muted-foreground">
+                  {formatTime(metrics.fuzzySearchMetrics.time)}
+                </span>
+              </div>
+              {metrics.fuzzySearchMetrics.took > 0 && (
+                <div className="flex items-center justify-between text-xs pl-2">
+                  <span className="text-muted-foreground/70">ES took</span>
+                  <span className="font-mono text-muted-foreground/70">
+                    {formatTime(metrics.fuzzySearchMetrics.took)}
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center justify-between text-xs pl-2">
+                <span className="text-muted-foreground/70">Hits</span>
+                <span className="font-mono text-muted-foreground/70">
+                  {metrics.fuzzySearchMetrics.hits}
+                </span>
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">Processing</span>
             <span className="font-mono text-muted-foreground">
@@ -140,6 +195,16 @@ export function SearchMetrics({ metrics, className }: SearchMetricsProps) {
             <Badge variant="secondary" className="text-xs">
               <Database className="h-3 w-3 mr-1" />
               Served from cache
+            </Badge>
+          </div>
+        )}
+        
+        {/* Fuzzy search indicator */}
+        {metrics.fuzzySearchUsed && (
+          <div className="pt-2 border-t">
+            <Badge variant="outline" className="text-xs border-orange-300 dark:border-orange-700 text-orange-700 dark:text-orange-300">
+              <SearchIcon className="h-3 w-3 mr-1" />
+              Switched to fuzzy search (no exact matches found)
             </Badge>
           </div>
         )}

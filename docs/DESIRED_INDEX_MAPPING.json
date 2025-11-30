@@ -1,0 +1,162 @@
+{
+  "settings": {
+    "number_of_shards": 3,
+    "number_of_replicas": 1
+  },
+  "mappings": {
+    "properties": {
+      "id": {
+        "type": "keyword"
+      },
+      "document_id": {
+        "type": "keyword"
+      },
+      "tenant_id": {
+        "type": "keyword"
+      },
+      "chunk_index": {
+        "type": "integer"
+      },
+      "chunk_offset": {
+        "type": "integer"
+      },
+      "title": {
+        "type": "text",
+        "fields": {
+          "keyword": {
+            "type": "keyword"
+          }
+        }
+      },
+      "content": {
+        "type": "text",
+        "analyzer": "standard"
+      },
+      "metadata": {
+        "type": "object",
+        "dynamic": false,
+        "properties": {
+          "filename": {
+            "type": "keyword"
+          },
+          "mime": {
+            "type": "keyword"
+          },
+          "source": {
+            "type": "keyword"
+          },
+          "source_url": {
+            "type": "keyword"
+          },
+          "type": {
+            "type": "keyword"
+          },
+          "originalUrl": {
+            "type": "keyword"
+          },
+          "extras": {
+            "type": "object",
+            "dynamic": true,
+            "properties": {
+              "book_id": {
+                "type": "integer"
+              },
+              "author": {
+                "type": "keyword"
+              },
+              "s3_bucket": {
+                "type": "keyword"
+              },
+              "s3_key": {
+                "type": "keyword"
+              },
+              "s3_etag": {
+                "type": "keyword"
+              },
+              "s3_last_modified": {
+                "type": "date"
+              },
+              "folder": {
+                "type": "keyword"
+              },
+              "html_meta": {
+                "type": "object",
+                "dynamic": true,
+                "properties": {
+                  "title": {
+                    "type": "text",
+                    "fields": {
+                      "keyword": {
+                        "type": "keyword"
+                      }
+                    }
+                  },
+                  "description": {
+                    "type": "text"
+                  },
+                  "keywords": {
+                    "type": "keyword"
+                  },
+                  "author": {
+                    "type": "keyword"
+                  },
+                  "url": {
+                    "type": "keyword"
+                  },
+                  "canonical_url": {
+                    "type": "keyword"
+                  },
+                  "image": {
+                    "type": "keyword"
+                  },
+                  "type": {
+                    "type": "keyword"
+                  },
+                  "og:title": {
+                    "type": "text",
+                    "fields": {
+                      "keyword": {
+                        "type": "keyword"
+                      }
+                    }
+                  },
+                  "og:description": {
+                    "type": "text"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "created_at": {
+        "type": "date"
+      },
+      "updated_at": {
+        "type": "date"
+      },
+      "producer_timestamp": {
+        "type": "date"
+      },
+      "producer_scan_time": {
+        "type": "float"
+      },
+      "queue_time": {
+        "type": "float"
+      },
+      "extraction_time": {
+        "type": "float"
+      },
+      "chunking_time": {
+        "type": "float"
+      },
+      "es_delete_time": {
+        "type": "float"
+      },
+      "es_indexing_time": {
+        "type": "float"
+      }
+    }
+  }
+}
+

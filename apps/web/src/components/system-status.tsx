@@ -27,6 +27,21 @@ const SERVICE_ICONS: Record<string, React.ComponentType<{ className?: string }>>
   RabbitMQ: Layers, // Layers icon for RabbitMQ (message queue/stack)
 };
 
+// Logical flow order: Database -> Message Queue -> Search Engine -> Cache
+const SERVICE_ORDER: Record<string, number> = {
+  PostgreSQL: 1,    // Database: stores user/tenant data and file manifest
+  RabbitMQ: 2,      // Message Queue: receives document ingestion jobs
+  Elasticsearch: 3, // Search Engine: indexes and searches documents
+  Redis: 4,         // Cache: caches search results and rate limiting
+};
+
+const SERVICE_DESCRIPTIONS: Record<string, string> = {
+  PostgreSQL: "Stores user accounts, tenant data, and file manifest for change detection",
+  RabbitMQ: "Message queue that receives document ingestion jobs from producers",
+  Elasticsearch: "Search engine that indexes document chunks and provides full-text search",
+  Redis: "In-memory cache for search results and per-tenant rate limiting",
+};
+
 export function SystemStatus() {
   const [services, setServices] = useState<ServiceStatus[]>([]);
   const [loading, setLoading] = useState(true);
@@ -138,17 +153,31 @@ export function SystemStatus() {
       </CardHeader>
       <CardContent>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {services.map((service) => {
+          {services
+            .sort((a, b) => {
+              const orderA = SERVICE_ORDER[a.name] || 999;
+              const orderB = SERVICE_ORDER[b.name] || 999;
+              return orderA - orderB;
+            })
+            .map((service) => {
             const Icon = SERVICE_ICONS[service.name] || Database;
+            const description = SERVICE_DESCRIPTIONS[service.name] || "";
             return (
               <div key={service.name} className="flex flex-col gap-3 p-4 border rounded-lg">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     {getStatusIcon(service.status)}
+                    <Icon className="h-5 w-5 text-muted-foreground" />
                     <span className="font-semibold">{service.name}</span>
                   </div>
                   {getStatusBadge(service.status)}
                 </div>
+                
+                {description && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {description}
+                  </p>
+                )}
 
                 {service.url && (
                   <div className="space-y-1">

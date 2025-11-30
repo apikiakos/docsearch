@@ -64,3 +64,8 @@ build/
 .coverage
 htmlcov/
 
+# Worker data caches
+workers/data/gutendex_books/
+workers/data/s3_seed_cache/
+workers/data/s3_downloads/
+

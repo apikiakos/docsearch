@@ -128,6 +128,7 @@ model FileManifest {
   lastMtime      DateTime
   sizeBytes      BigInt
   contentHash    String?  // Optional SHA-256 hash
+  etag           String?  // HTTP ETag for remote sources
   lastIndexedAt  DateTime @default(now())
   isDeleted      Boolean  @default(false)
 

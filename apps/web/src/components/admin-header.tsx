@@ -46,10 +46,7 @@ export function AdminHeader({ user }: AdminHeaderProps) {
   return (
     <header className="flex h-14 items-center gap-2 border-b bg-background/80 px-4 md:px-6">
       <div className="flex flex-1 items-center gap-2">
-        <div className="relative hidden max-w-xs md:block">
-          <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input className="pl-8" placeholder="Search documents, tenants..." />
-        </div>
+        {/* Search input removed - not functional */}
       </div>
       <div className="flex items-center gap-3">
         {isPlatformAdmin && <SystemStatusWidget locale="en" />}

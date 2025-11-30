@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
+import { elasticsearch, getTenantIndex } from "@/lib/elasticsearch";
 
 export async function GET(request: Request) {
   try {
@@ -60,15 +61,44 @@ export async function GET(request: Request) {
       prisma.tenant.count({ where }),
     ]);
 
+    // Get document counts from Elasticsearch for each tenant
+    const tenantsWithCounts = await Promise.all(
+      tenants.map(async (t) => {
+        let documentCount = 0;
+        try {
+          const indexName = getTenantIndex(t.slug);
+          // Count unique documents by using a cardinality aggregation on document_id
+          const aggResult = await elasticsearch.search({
+            index: indexName,
+            size: 0,
+            aggs: {
+              unique_documents: {
+                cardinality: {
+                  field: "document_id",
+                },
+              },
+            },
+          });
+          documentCount = (aggResult.aggregations?.unique_documents as { value: number })?.value || 0;
+        } catch (error) {
+          // If index doesn't exist or there's an error, documentCount remains 0
+          // This is expected for tenants that haven't been indexed yet
+        }
+
+        return {
+          id: t.id,
+          slug: t.slug,
+          name: t.name,
+          createdAt: t.createdAt,
+          updatedAt: t.updatedAt,
+          memberCount: t._count.memberships,
+          documentCount,
+        };
+      })
+    );
+
     return NextResponse.json({
-      tenants: tenants.map((t) => ({
-        id: t.id,
-        slug: t.slug,
-        name: t.name,
-        createdAt: t.createdAt,
-        updatedAt: t.updatedAt,
-        memberCount: t._count.memberships,
-      })),
+      tenants: tenantsWithCounts,
       pagination: {
         page,
         limit,

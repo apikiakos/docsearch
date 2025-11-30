@@ -174,15 +174,53 @@ curl -X DELETE "http://localhost:3000/api/documents/DOCUMENT_ID" \
 
 ## Environment Variables
 
-Create `apps/web/.env`:
+### Root `.env` (Single File for All Services)
+
+Create a `.env` file in the **project root** (not in `apps/web/`):
 
 ```env
+# Database
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/docsearch?schema=public"
-AUTH_SECRET="your-secret-key-here"
+
+# NextAuth
+AUTH_SECRET="your-secret-key-here-change-in-production"
 NEXTAUTH_URL="http://localhost:3000"
+
+# Elasticsearch
 ELASTICSEARCH_URL="http://localhost:9200"
+
+# Redis
 REDIS_URL="redis://localhost:6379"
+
+# AWS S3 Configuration (for seed_s3_from_gutendex.py and CloudFormation)
+AWS_ACCESS_KEY_ID="your-aws-access-key"
+AWS_SECRET_ACCESS_KEY="your-aws-secret-key"
+AWS_DEFAULT_REGION="us-east-1"
+AWS_S3_BUCKET="your-bucket-name"
 ```
+
+**Note**: 
+- Next.js automatically loads `.env` from the project root (configured in `next.config.ts`)
+- Prisma config files are updated to load from the root `.env` as well
+- Python scripts (seed_s3_from_gutendex.py, etc.) load from the root `.env` file
+- Use CloudFormation to create the bucket: `./infrastructure/deploy-s3.sh`
+- Make sure your AWS credentials have S3 and CloudFormation permissions
+
+## Infrastructure
+
+### S3 Bucket Setup
+
+Deploy S3 bucket and folder structure using CloudFormation:
+
+```bash
+# Deploy S3 bucket (reads credentials from root .env)
+./infrastructure/deploy-s3.sh
+
+# Destroy S3 bucket (⚠️ deletes all data)
+./infrastructure/destroy-s3.sh
+```
+
+See [infrastructure/README.md](./infrastructure/README.md) for detailed documentation.
 
 ## API Documentation
 

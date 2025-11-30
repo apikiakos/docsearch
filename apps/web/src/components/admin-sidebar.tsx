@@ -52,17 +52,6 @@ const navSections: NavSection[] = [
       {
         label: "Documents",
         href: "/dashboard/documents",
-        icon: FileText,
-        disabled: false,
-      },
-    ],
-  },
-  {
-    label: "Search",
-    items: [
-      {
-        label: "Search",
-        href: "/dashboard/search",
         icon: Search,
         disabled: false,
       },

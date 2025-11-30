@@ -1,14 +1,33 @@
 """Database access for file manifest (PostgreSQL)"""
 import os
+from pathlib import Path
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
 from typing import Optional, Dict, List
 
-DATABASE_URL = os.environ.get(
+# Load environment variables from root .env file
+try:
+    from dotenv import load_dotenv
+    # Load from root .env (two levels up from workers/python)
+    root_dir = Path(__file__).parent.parent.parent
+    env_path = root_dir / ".env"
+    if env_path.exists():
+        load_dotenv(env_path)
+except ImportError:
+    # python-dotenv not installed, use environment variables directly
+    pass
+
+# Get DATABASE_URL and strip Prisma-specific query parameters
+_raw_db_url = os.environ.get(
     "DATABASE_URL",
     "postgresql://postgres:postgres@localhost:5432/docsearch"
 )
+# Remove ?schema=public and other Prisma-specific parameters (psycopg2 doesn't understand them)
+if "?" in _raw_db_url:
+    DATABASE_URL = _raw_db_url.split("?")[0]
+else:
+    DATABASE_URL = _raw_db_url
 
 
 class ManifestDB:
@@ -45,6 +64,7 @@ class ManifestDB:
                             "lastMtime" TIMESTAMP(3) WITHOUT TIME ZONE NOT NULL,
                             "sizeBytes" BIGINT NOT NULL,
                             "contentHash" TEXT,
+                            etag TEXT,
                             "lastIndexedAt" TIMESTAMP(3) WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
                             "isDeleted" BOOLEAN NOT NULL DEFAULT FALSE,
                             UNIQUE ("tenantId", path)
@@ -53,6 +73,16 @@ class ManifestDB:
                         ON file_manifest("tenantId", "isDeleted");
                     """)
                     conn.commit()
+                else:
+                    # Check if etag column exists, add it if not
+                    cur.execute("""
+                        SELECT column_name 
+                        FROM information_schema.columns 
+                        WHERE table_name = 'file_manifest' AND column_name = 'etag';
+                    """)
+                    if not cur.fetchone():
+                        cur.execute('ALTER TABLE file_manifest ADD COLUMN IF NOT EXISTS etag TEXT;')
+                        conn.commit()
 
     def get_manifest(self, tenant_id: str, path: str) -> Optional[Dict]:
         """Get manifest entry for a file"""
@@ -72,23 +102,25 @@ class ManifestDB:
         document_id: str,
         last_mtime: datetime,
         size_bytes: int,
-        content_hash: Optional[str] = None
+        content_hash: Optional[str] = None,
+        etag: Optional[str] = None
     ):
         """Insert a new manifest entry"""
         with self._get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
                     INSERT INTO file_manifest
-                    ("tenantId", path, "documentId", "lastMtime", "sizeBytes", "contentHash", "lastIndexedAt")
-                    VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                    ("tenantId", path, "documentId", "lastMtime", "sizeBytes", "contentHash", etag, "lastIndexedAt")
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
                     ON CONFLICT ("tenantId", path) DO UPDATE SET
                         "documentId" = EXCLUDED."documentId",
                         "lastMtime" = EXCLUDED."lastMtime",
                         "sizeBytes" = EXCLUDED."sizeBytes",
                         "contentHash" = EXCLUDED."contentHash",
+                        etag = EXCLUDED.etag,
                         "lastIndexedAt" = CURRENT_TIMESTAMP,
                         "isDeleted" = FALSE
-                """, (tenant_id, path, document_id, last_mtime, size_bytes, content_hash))
+                """, (tenant_id, path, document_id, last_mtime, size_bytes, content_hash, etag))
                 conn.commit()
 
     def update_manifest(
@@ -97,7 +129,8 @@ class ManifestDB:
         path: str,
         last_mtime: datetime,
         size_bytes: int,
-        content_hash: Optional[str] = None
+        content_hash: Optional[str] = None,
+        etag: Optional[str] = None
     ):
         """Update manifest entry"""
         with self._get_connection() as conn:
@@ -107,10 +140,11 @@ class ManifestDB:
                     SET "lastMtime" = %s,
                         "sizeBytes" = %s,
                         "contentHash" = %s,
+                        etag = %s,
                         "lastIndexedAt" = CURRENT_TIMESTAMP,
                         "isDeleted" = FALSE
                     WHERE "tenantId" = %s AND path = %s
-                """, (last_mtime, size_bytes, content_hash, tenant_id, path))
+                """, (last_mtime, size_bytes, content_hash, etag, tenant_id, path))
                 conn.commit()
 
     def mark_deleted(self, tenant_id: str, path: str):

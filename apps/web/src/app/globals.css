@@ -121,5 +121,52 @@
   }
   mark {
     @apply bg-yellow-200 dark:bg-yellow-900 px-0.5 rounded;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
+}
+
+/* Ensure table cells with highlights wrap properly */
+.search-highlight-cell {
+  max-width: 600px;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.search-highlight-cell * {
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+}
+
+/* JSON Syntax Highlighting */
+.json-highlight {
+  color: #d4d4d4;
+}
+
+.json-highlight .json-key {
+  color: #9cdcfe;
+}
+
+.json-highlight .json-string {
+  color: #ce9178;
+}
+
+.json-highlight .json-number {
+  color: #b5cea8;
+}
+
+.json-highlight .json-boolean {
+  color: #569cd6;
+}
+
+.json-highlight .json-null {
+  color: #808080;
+}
+
+.json-highlight .json-punctuation {
+  color: #d4d4d4;
 }

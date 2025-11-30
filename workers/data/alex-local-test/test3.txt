@@ -1,0 +1,1 @@
+Elasticsearch provides powerful full-text search capabilities.

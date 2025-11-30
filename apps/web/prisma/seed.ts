@@ -2,7 +2,11 @@ import { PrismaClient } from "@prisma/client";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
-import "dotenv/config";
+import { config } from "dotenv";
+import { resolve } from "path";
+
+// Load .env from project root (three levels up from apps/web/prisma/seed.ts)
+config({ path: resolve(__dirname, "../../../.env") });
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
@@ -16,6 +20,8 @@ async function main() {
     { slug: "gutenberg", name: "Project Gutenberg" },
     { slug: "govdocs", name: "Government Documents" },
     { slug: "alex-local", name: "Alex Local" },
+    { slug: "s3-tenant-1", name: "S3 Tenant 1" },
+    { slug: "s3-tenant-2", name: "S3 Tenant 2" },
   ];
 
   const createdTenants = [];
@@ -65,6 +71,8 @@ async function main() {
     { email: "gutenberg@example.com", name: "Gutenberg User", tenantSlug: "gutenberg" },
     { email: "govdocs@example.com", name: "GovDocs User", tenantSlug: "govdocs" },
     { email: "alex@example.com", name: "Alex User", tenantSlug: "alex-local" },
+    { email: "s3-tenant-1@example.com", name: "S3 Tenant 1 User", tenantSlug: "s3-tenant-1" },
+    { email: "s3-tenant-2@example.com", name: "S3 Tenant 2 User", tenantSlug: "s3-tenant-2" },
   ];
 
   const userPasswordHash = await bcrypt.hash("user123", 10);
