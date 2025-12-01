@@ -31,77 +31,43 @@ export async function GET(request: Request) {
       : null; // null means show all tenants
 
     // Build where clause: combine search filter with admin tenants list filter
-    const where: {
-      slug?: { in: string[] } | { contains: string; mode: "insensitive" } | { AND: Array<{ in: string[] } | { contains: string; mode: "insensitive" }> };
-      OR?: Array<{ slug: { contains: string; mode: "insensitive" } } | { name: { contains: string; mode: "insensitive" } }>;
-    } = {};
+    const whereConditions: Array<Record<string, unknown>> = [];
 
+    // First, filter by allowed slugs if configured
     if (allowedSlugs && allowedSlugs.length > 0) {
-      // Filter by admin tenants list
-      if (search) {
-        // Combine search with allowed slugs: tenant must be in allowed list AND match search
-        where.OR = [
-          {
-            slug: {
-              in: allowedSlugs,
-            },
-            name: {
-              contains: search,
-              mode: "insensitive" as const,
-            },
-          },
-          {
-            slug: {
-              in: allowedSlugs,
-            },
-            slug: {
-              contains: search,
-              mode: "insensitive" as const,
-            },
-          },
-        ];
-        // Actually, we need to filter by allowed slugs first, then search within those
-        // Let's use a simpler approach: filter by slug in allowed list, then apply search
-        where.slug = {
-          in: allowedSlugs.filter((slug: string) =>
-            slug.toLowerCase().includes(search.toLowerCase())
-          ),
-        };
-        // Also search by name within allowed tenants
-        where.OR = [
-          {
-            slug: {
-              in: allowedSlugs,
-            },
-            name: {
-              contains: search,
-              mode: "insensitive" as const,
-            },
-          },
-        ];
-      } else {
-        // Just filter by allowed slugs
-        where.slug = {
+      whereConditions.push({
+        slug: {
           in: allowedSlugs,
-        };
-      }
-    } else if (search) {
-      // No admin filter, just search
-      where.OR = [
-        {
-          slug: {
-            contains: search,
-            mode: "insensitive" as const,
-          },
         },
-        {
-          name: {
-            contains: search,
-            mode: "insensitive" as const,
-          },
-        },
-      ];
+      });
     }
+
+    // Then, add search filter if provided
+    if (search) {
+      whereConditions.push({
+        OR: [
+          {
+            slug: {
+              contains: search,
+              mode: "insensitive" as const,
+            },
+          },
+          {
+            name: {
+              contains: search,
+              mode: "insensitive" as const,
+            },
+          },
+        ],
+      });
+    }
+
+    // Combine conditions with AND (if multiple conditions) or use single condition
+    const where = whereConditions.length > 1
+      ? { AND: whereConditions }
+      : whereConditions.length === 1
+      ? whereConditions[0]
+      : {};
 
     const [tenants, total] = await Promise.all([
       prisma.tenant.findMany({
