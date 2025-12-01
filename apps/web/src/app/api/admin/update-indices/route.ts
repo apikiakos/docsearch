@@ -7,6 +7,12 @@ import { getStandardMapping } from "../../../../lib/elasticsearch";
  * Update all tenant indices to use the standard mapping structure
  * This endpoint updates existing indices to match the desired mapping
  */
+
+type MappingLike = {
+  properties?: Record<string, unknown>;
+};
+
+
 export async function POST(request: Request) {
   try {
     const user = await requireAuth();
@@ -50,8 +56,9 @@ export async function POST(request: Request) {
           const currentSettings = await elasticsearch.indices.getSettings({ index: indexName });
           
           const settings = currentSettings[indexName]?.settings?.index || {};
-          const mapping = currentMapping[indexName]?.mappings || {};
-          const metadataProps = mapping.properties?.metadata?.properties || {};
+          const mapping = (currentMapping[indexName]?.mappings || {}) as MappingLike;
+          const metadataField = (mapping.properties?.metadata as MappingLike) || {};
+          const metadataProps = metadataField.properties || {};
           
           // Check if mapping or settings need updating
           const needsReplicaUpdate = settings.number_of_replicas !== "1";
@@ -84,6 +91,7 @@ export async function POST(request: Request) {
           // We'll add the new fields (source_url, type, extras) to the mapping
           await elasticsearch.indices.putMapping({
             index: indexName,
+            // @ts-expect-error - Elasticsearch client types are overly strict, but the mapping structure is correct
             properties: standardMapping.properties,
           });
 
