@@ -388,11 +388,30 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
                     ? s3PresignedUrl
                     : (remoteUrl ? (() => {
                         // Double-check HTTPS conversion and ensure we're using the correct URL
-                        const finalUrl = ensureHttps(remoteUrl) || remoteUrl;
-                        // For Gutenberg sources, if we detect an old cache/epub URL pattern, log a warning
-                        if (source === "gutendex" && finalUrl.includes("cache/epub") && !finalUrl.includes("ebooks")) {
-                          console.warn("[DocumentViewer] Using old Gutenberg URL format. Consider reindexing this document:", finalUrl);
+                        let finalUrl = ensureHttps(remoteUrl) || remoteUrl;
+                        
+                        // For Gutenberg sources, explicitly reject old cache/epub URL patterns
+                        if (source === "gutendex") {
+                          const isOldPattern = finalUrl.includes("cache/epub") || (finalUrl.includes("/pg") && finalUrl.includes(".txt") && !finalUrl.includes("ebooks"));
+                          if (isOldPattern) {
+                            console.error("[DocumentViewer] Rejecting old Gutenberg URL pattern:", finalUrl);
+                            // Fallback to sourceUrl or originalUrl if they exist and are not old pattern
+                            if (sourceUrl && !sourceUrl.includes("cache/epub") && !(sourceUrl.includes("/pg") && sourceUrl.includes(".txt") && !sourceUrl.includes("ebooks"))) {
+                              finalUrl = ensureHttps(sourceUrl) || sourceUrl;
+                              console.log("[DocumentViewer] Using sourceUrl instead:", finalUrl);
+                            } else if (originalUrl && !originalUrl.includes("cache/epub") && !(originalUrl.includes("/pg") && originalUrl.includes(".txt") && !originalUrl.includes("ebooks"))) {
+                              finalUrl = ensureHttps(originalUrl) || originalUrl;
+                              console.log("[DocumentViewer] Using originalUrl instead:", finalUrl);
+                            } else {
+                              console.error("[DocumentViewer] All URLs have old pattern, cannot display document");
+                              return undefined;
+                            }
+                          }
                         }
+                        
+                        // Final HTTPS check
+                        finalUrl = ensureHttps(finalUrl) || finalUrl;
+                        console.log("[DocumentViewer] Final iframe URL:", finalUrl);
                         return finalUrl;
                       })() : undefined)
               }
