@@ -88,7 +88,9 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
     : null;
   
   // For Gutenberg books and other remote sources, prefer iframe with originalUrl
+  // Ensure URL is HTTPS to prevent mixed content errors
   const useIframeForRemote = originalUrl && (source === "gutendex" || originalUrl.startsWith("http"));
+  const remoteUrl = useIframeForRemote && originalUrl ? ensureHttps(originalUrl) || originalUrl : null;
   
   // For local files, use the API route
   const useLocalFileUrl = localFileUrl !== null;
@@ -338,7 +340,7 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
                   ? localFileUrl! 
                   : (isS3Source && s3PresignedUrl)
                     ? s3PresignedUrl
-                    : (useIframeForRemote && originalUrl ? ensureHttps(originalUrl) || originalUrl : undefined)
+                    : remoteUrl || undefined
               }
               className="w-full border-0"
               style={{ minHeight: "600px", display: "block" }}
