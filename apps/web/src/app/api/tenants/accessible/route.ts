@@ -6,7 +6,18 @@ import { elasticsearch, getTenantIndex } from "@/lib/elasticsearch";
 export async function GET() {
   try {
     const user = await requireAuth();
-    const accessibleSlugs = await getUserAccessibleTenants(user);
+    let accessibleSlugs = await getUserAccessibleTenants(user);
+
+    // Filter by ADMIN_TENANTS_LIST if set (for demo purposes)
+    // This ensures the tenant selector only shows configured tenants
+    const adminTenantsList = process.env.ADMIN_TENANTS_LIST;
+    if (adminTenantsList) {
+      const allowedSlugs = adminTenantsList.split(",").map((s: string) => s.trim()).filter((s: string) => s.length > 0);
+      if (allowedSlugs.length > 0) {
+        // Intersect user's accessible tenants with allowed tenants
+        accessibleSlugs = accessibleSlugs.filter((slug: string) => allowedSlugs.includes(slug));
+      }
+    }
 
     // Fetch tenant details
     const tenants = await prisma.tenant.findMany({
