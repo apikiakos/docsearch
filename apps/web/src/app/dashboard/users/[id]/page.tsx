@@ -12,7 +12,7 @@ type Context = {
 export default async function UserDetailPage(context: Context) {
   const session = await auth();
   const isPlatformAdmin =
-    session?.user?.memberships?.some((m) => m.role === "platform_admin") ?? false;
+    session?.user?.memberships?.some((m: { tenantId: string; tenantSlug: string; role: string }) => m.role === "platform_admin") ?? false;
 
   if (!isPlatformAdmin) {
     redirect("/dashboard");

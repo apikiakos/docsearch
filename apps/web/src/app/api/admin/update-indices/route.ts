@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     
     // Check if user is platform admin
     const isPlatformAdmin =
-      user.memberships?.some((m) => m.role === "platform_admin") ?? false;
+      user.memberships?.some((m: { tenantId: string; tenantSlug: string; role: string }) => m.role === "platform_admin") ?? false;
     
     if (!isPlatformAdmin) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });

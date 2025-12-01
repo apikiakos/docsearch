@@ -143,7 +143,7 @@ export async function GET(request: Request) {
      * - Presents clean document-level results to users (not chunks)
      * - Uses best chunk score for ranking (most relevant chunk = document relevance)
      */
-    const indexPattern = tenantsToSearch.map((t) => getTenantIndex(t)).join(",");
+    const indexPattern = tenantsToSearch.map((t: string) => getTenantIndex(t)).join(",");
     
     if (!indexPattern) {
       // No indices to search - return empty results

@@ -39,14 +39,14 @@ export function hasTenantAccess(
 ): boolean {
   // Platform admin can access all tenants
   const isPlatformAdmin = user.memberships.some(
-    (m) => m.role === "platform_admin"
+    (m: { tenantSlug: string; role: TenantRole }) => m.role === "platform_admin"
   );
   if (isPlatformAdmin) {
     return true;
   }
 
   // Check if user has membership for this tenant
-  return user.memberships.some((m) => m.tenantSlug === tenantSlug);
+  return user.memberships.some((m: { tenantSlug: string; role: TenantRole }) => m.tenantSlug === tenantSlug);
 }
 
 /**
@@ -56,7 +56,7 @@ export function getUserTenantRole(
   user: AuthUser,
   tenantSlug: string
 ): TenantRole | null {
-  const membership = user.memberships.find((m) => m.tenantSlug === tenantSlug);
+  const membership = user.memberships.find((m: { tenantSlug: string; role: TenantRole }) => m.tenantSlug === tenantSlug);
   return membership?.role || null;
 }
 
@@ -65,13 +65,13 @@ export function getUserTenantRole(
  */
 export async function getUserAccessibleTenants(user: AuthUser): Promise<string[]> {
   // Platform admin can access all tenants
-  if (user.memberships.some((m) => m.role === "platform_admin")) {
+  if (user.memberships.some((m: { tenantSlug: string; role: TenantRole }) => m.role === "platform_admin")) {
     // Fetch all tenants from DB
     const tenants = await prisma.tenant.findMany();
-    return tenants.map((t) => t.slug);
+    return tenants.map((t: { slug: string }) => t.slug);
   }
 
-  return user.memberships.map((m) => m.tenantSlug);
+  return user.memberships.map((m: { tenantSlug: string; role: TenantRole }) => m.tenantSlug);
 }
 
 /**

@@ -48,7 +48,7 @@ export async function GET(request: Request) {
     }
 
     // Search across all accessible tenants with aggregations
-    const indexPattern = tenantsToSearch.map((t) => getTenantIndex(t)).join(",");
+    const indexPattern = tenantsToSearch.map((t: string) => getTenantIndex(t)).join(",");
     
     if (!indexPattern) {
       // No indices to search

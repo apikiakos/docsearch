@@ -6,7 +6,7 @@ import { auth } from "@/auth";
 export default async function DashboardPage() {
   const session = await auth();
   const isPlatformAdmin =
-    session?.user?.memberships?.some((m) => m.role === "platform_admin") ?? false;
+    session?.user?.memberships?.some((m: { tenantId: string; tenantSlug: string; role: string }) => m.role === "platform_admin") ?? false;
 
   return (
     <div className="space-y-6">

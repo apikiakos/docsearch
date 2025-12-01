@@ -30,7 +30,7 @@ export default function TopNav({ user }: TopNavProps) {
     await signOut({ callbackUrl: "/" });
   };
 
-  const isPlatformAdmin = user.memberships?.some((m) => m.role === "platform_admin");
+  const isPlatformAdmin = user.memberships?.some((m: { tenantId: string; tenantSlug: string; role: string }) => m.role === "platform_admin");
 
   return (
     <header className="flex h-16 items-center justify-between border-b bg-background px-6">

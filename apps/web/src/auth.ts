@@ -44,7 +44,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           id: user.id,
           email: user.email,
           name: user.name,
-          memberships: user.memberships.map((m) => ({
+          memberships: user.memberships.map((m: { tenantId: string; tenant: { slug: string }; role: string }) => ({
             tenantId: m.tenantId,
             tenantSlug: m.tenant.slug,
             role: m.role as TenantRole,

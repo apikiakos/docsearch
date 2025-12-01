@@ -27,11 +27,11 @@ interface AdminHeaderProps {
 }
 
 export function AdminHeader({ user }: AdminHeaderProps) {
-  const isPlatformAdmin = user.memberships?.some((m) => m.role === "platform_admin");
+  const isPlatformAdmin = user.memberships?.some((m: { tenantId: string; tenantSlug: string; role: string }) => m.role === "platform_admin");
   const userInitials = user.name
     ? user.name
         .split(" ")
-        .map((n) => n[0])
+        .map((n: string) => n[0])
         .join("")
         .toUpperCase()
         .slice(0, 2)
