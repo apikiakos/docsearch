@@ -40,9 +40,10 @@ type IndexInfo = {
 
 interface IndexInfoProps {
   tenantSlug: string;
+  isPlatformAdmin?: boolean;
 }
 
-export function IndexInfo({ tenantSlug }: IndexInfoProps) {
+export function IndexInfo({ tenantSlug, isPlatformAdmin = false }: IndexInfoProps) {
   const [indexInfo, setIndexInfo] = useState<IndexInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [mappingOpen, setMappingOpen] = useState(false);
@@ -135,7 +136,7 @@ export function IndexInfo({ tenantSlug }: IndexInfoProps) {
               </CardTitle>
               <CardDescription>Index configuration and statistics</CardDescription>
             </div>
-            {indexInfo && indexInfo.exists && (
+            {indexInfo && indexInfo.exists && isPlatformAdmin && (
               <Button
                 variant="destructive"
                 size="sm"

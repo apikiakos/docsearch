@@ -121,7 +121,7 @@ export default async function TenantDetailPage(context: Context) {
           </div>
 
           {/* Elasticsearch Index Information */}
-          <IndexInfo tenantSlug={tenant.slug} />
+          <IndexInfo tenantSlug={tenant.slug} isPlatformAdmin={isPlatformAdmin} />
         </TabsContent>
 
         <TabsContent value="documents" className="space-y-6">
