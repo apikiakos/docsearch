@@ -205,6 +205,12 @@ AWS_ACCESS_KEY_ID="your-aws-access-key"
 AWS_SECRET_ACCESS_KEY="your-aws-secret-key"
 AWS_DEFAULT_REGION="us-east-1"
 AWS_S3_BUCKET="your-bucket-name"
+
+# Admin Interface Configuration (optional, for demo purposes)
+# Comma-separated list of tenant slugs to display in admin interface
+# If not set, all tenants are shown
+# Example: ADMIN_TENANTS_LIST="gutenberg,s3-tenant-1,s3-tenant-2"
+ADMIN_TENANTS_LIST=""
 ```
 
 **Note**: 
