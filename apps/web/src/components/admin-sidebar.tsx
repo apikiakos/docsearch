@@ -37,7 +37,8 @@ const bulletColors: Record<string, string> = {
   System: "bg-[#60A5FA]",
 };
 
-const navSections: NavSection[] = [
+// Base navigation sections - will be filtered based on user role
+const baseNavSections: NavSection[] = [
   {
     label: "Main",
     items: [
@@ -70,12 +71,6 @@ const navSections: NavSection[] = [
         icon: Users,
         disabled: false,
       },
-      {
-        label: "Settings",
-        href: "/dashboard/settings",
-        icon: Settings,
-        disabled: false,
-      },
     ],
   },
 ];
@@ -89,6 +84,30 @@ interface AdminSidebarProps {
 
 export function AdminSidebar({ user }: AdminSidebarProps) {
   const pathname = usePathname();
+  
+  // Check if user is platform admin
+  const isPlatformAdmin = user.memberships?.some(
+    (m: { tenantId: string; tenantSlug: string; role: string }) => m.role === "platform_admin"
+  ) ?? false;
+
+  // Filter navigation based on user role
+  // Tenant users only see Dashboard
+  // Platform admins see all sections
+  const navSections: NavSection[] = isPlatformAdmin
+    ? baseNavSections
+    : [
+        {
+          label: "Main",
+          items: [
+            {
+              label: "Dashboard",
+              href: "/dashboard",
+              icon: LayoutDashboard,
+              disabled: false,
+            },
+          ],
+        },
+      ];
 
   return (
     <aside className="hidden bg-background/80 border-r md:flex md:w-64 md:flex-col md:h-screen md:fixed md:left-0 md:top-0">

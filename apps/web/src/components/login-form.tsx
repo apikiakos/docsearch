@@ -107,11 +107,11 @@ export default function LoginForm() {
             />
           </div>
           {error && (
-            <div className="text-sm text-destructive">{error}</div>
+            <div className="text-sm text-destructive pt-2">{error}</div>
           )}
         </CardContent>
-        <CardFooter>
-          <Button type="submit" className="w-full" disabled={loading}>
+        <CardFooter className="pt-6">
+          <Button type="submit" className="w-full" disabled={loading} size="lg">
             {loading ? "Signing in..." : "Sign In"}
           </Button>
         </CardFooter>
