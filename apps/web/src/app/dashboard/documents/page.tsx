@@ -52,6 +52,7 @@ export default function SearchPage() {
   const initialQuery = searchParams.get("q") || "";
   const initialTenant = searchParams.get("tenant") || "";
   const initialBypassCache = searchParams.get("bypassCache") === "true";
+  const initialAllowFuzzy = searchParams.get("allowFuzzy") === "true";
 
   const [query, setQuery] = useState(initialQuery);
   // Default to "all" (empty string) for "All tenants"

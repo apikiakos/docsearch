@@ -155,9 +155,17 @@ export async function getIndexInfo(tenantSlug: string) {
       indexName,
       exists: true,
       shards: {
-        primary: parseInt(indexSettings?.number_of_shards || "1", 10),
-        replicas: parseInt(indexSettings?.number_of_replicas || "0", 10),
-        total: parseInt(indexSettings?.number_of_shards || "1", 10) * (1 + parseInt(indexSettings?.number_of_replicas || "0", 10)),
+        primary: typeof indexSettings?.number_of_shards === "string" 
+          ? parseInt(indexSettings.number_of_shards, 10)
+          : (indexSettings?.number_of_shards as number) || 1,
+        replicas: typeof indexSettings?.number_of_replicas === "string"
+          ? parseInt(indexSettings.number_of_replicas, 10)
+          : (indexSettings?.number_of_replicas as number) || 0,
+        total: (typeof indexSettings?.number_of_shards === "string"
+          ? parseInt(indexSettings.number_of_shards, 10)
+          : (indexSettings?.number_of_shards as number) || 1) * (1 + (typeof indexSettings?.number_of_replicas === "string"
+          ? parseInt(indexSettings.number_of_replicas, 10)
+          : (indexSettings?.number_of_replicas as number) || 0)),
       },
       documentCount: uniqueDocumentCount, // Unique documents
       chunkCount: totalChunkCount, // Total chunks

@@ -47,7 +47,7 @@ export function AdminHeader({ user }: AdminHeaderProps) {
         {/* Search input removed - not functional */}
       </div>
       <div className="flex items-center gap-3">
-        {isPlatformAdmin && <SystemStatusWidget locale="en" />}
+        {isPlatformAdmin && <SystemStatusWidget />}
         {isPlatformAdmin && <div className="h-6 w-px bg-border" />}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

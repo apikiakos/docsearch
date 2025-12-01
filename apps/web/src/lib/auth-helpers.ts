@@ -1,6 +1,6 @@
 import { auth } from "../auth";
 import { prisma } from "./prisma";
-import type { TenantRole } from "@repo/core/tenant";
+import type { TenantRole } from "@distributed-docsearch/core/tenant";
 
 export interface AuthUser {
   id: string;

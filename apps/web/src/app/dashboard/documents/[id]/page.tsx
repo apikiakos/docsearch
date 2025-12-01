@@ -203,22 +203,28 @@ export default function DocumentDetailPage() {
                 <p className="text-sm">{document.chunk_count} chunk{document.chunk_count !== 1 ? "s" : ""}</p>
               </div>
             )}
-            {document.metadata?.originalUrl && (
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">Source</p>
-                <a
-                  href={document.metadata.originalUrl as string}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-primary hover:underline break-all"
-                >
-                  {document.metadata.originalUrl as string}
-                </a>
-              </div>
-            )}
+            {(() => {
+              const originalUrl = document.metadata?.originalUrl;
+              if (originalUrl && typeof originalUrl === "string") {
+                return (
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground mb-1">Source</p>
+                    <a
+                      href={originalUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-primary hover:underline break-all"
+                    >
+                      {originalUrl}
+                    </a>
+                  </div>
+                );
+              }
+              return null;
+            })()}
           </div>
 
-          {document.metadata && Object.keys(document.metadata).length > 0 && (
+          {document.metadata && Object.keys(document.metadata).length > 0 ? (
             <div className="space-y-4">
               <h3 className="text-sm font-medium">Metadata</h3>
               
@@ -226,37 +232,37 @@ export default function DocumentDetailPage() {
               <div className="space-y-2">
                 <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Core Fields</h4>
                 <div className="grid grid-cols-2 gap-3 text-sm">
-                  {document.metadata.filename && (
+                  {document.metadata.filename != null ? (
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">Filename</p>
                       <p className="font-mono text-xs break-all">{String(document.metadata.filename)}</p>
                     </div>
-                  )}
-                  {document.metadata.mime && (
+                  ) : null}
+                  {document.metadata.mime != null ? (
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">MIME Type</p>
                       <p className="font-mono text-xs">{String(document.metadata.mime)}</p>
                     </div>
-                  )}
-                  {document.metadata.source && (
+                  ) : null}
+                  {document.metadata.source != null ? (
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">Source</p>
                       <p className="text-xs">{String(document.metadata.source)}</p>
                     </div>
-                  )}
-                  {document.metadata.source_url && (
+                  ) : null}
+                  {document.metadata.source_url != null ? (
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">Source URL</p>
                       <p className="font-mono text-xs break-all">{String(document.metadata.source_url)}</p>
                     </div>
-                  )}
-                  {document.metadata.type && (
+                  ) : null}
+                  {document.metadata.type != null ? (
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">Document Type</p>
                       <p className="text-xs">{String(document.metadata.type)}</p>
                     </div>
-                  )}
-                  {document.metadata.originalUrl && (
+                  ) : null}
+                  {document.metadata.originalUrl != null ? (
                     <div className="col-span-2">
                       <p className="text-xs text-muted-foreground mb-1">Original URL</p>
                       <a
@@ -268,12 +274,12 @@ export default function DocumentDetailPage() {
                         {String(document.metadata.originalUrl)}
                       </a>
                     </div>
-                  )}
+                  ) : null}
                 </div>
               </div>
 
               {/* Extras (Type-specific metadata) */}
-              {document.metadata.extras && typeof document.metadata.extras === "object" && Object.keys(document.metadata.extras).length > 0 && (
+              {document.metadata.extras && typeof document.metadata.extras === "object" && Object.keys(document.metadata.extras).length > 0 ? (
                 <div className="space-y-2">
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Additional Metadata</h4>
                   <div className="grid grid-cols-2 gap-3 text-sm">
@@ -300,7 +306,7 @@ export default function DocumentDetailPage() {
                     })}
                   </div>
                 </div>
-              )}
+              ) : null}
 
               {/* Legacy fields (for backward compatibility - fields that should be in extras) */}
               {(() => {
@@ -343,7 +349,7 @@ export default function DocumentDetailPage() {
                 </div>
               </details>
             </div>
-          )}
+          ) : null}
 
           <div>
             <p className="text-sm font-medium text-muted-foreground mb-2">Content</p>

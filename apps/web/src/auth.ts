@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "./lib/prisma";
 import bcrypt from "bcryptjs";
-import type { TenantRole } from "@repo/core/tenant";
+import type { TenantRole } from "@distributed-docsearch/core/tenant";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
@@ -67,7 +67,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.memberships = (token.memberships as Array<{
           tenantId: string;
           tenantSlug: string;
-          role: string;
+          role: TenantRole;
         }>) || [];
       }
       return session;

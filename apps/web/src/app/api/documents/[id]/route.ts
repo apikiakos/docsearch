@@ -146,23 +146,20 @@ export async function DELETE(_request: Request, context: Context) {
     // Mark document as deleted in manifest (if it exists)
     // We need to find the manifest entry by document_id
     try {
-      const manifestEntry = await prisma.fileManifest.findFirst({
-        where: {
-          tenantId: tenantSlug,
-          documentId: documentId,
-        },
-      });
+      // Use raw SQL query since Prisma client may not have FileManifest model generated
+      const manifestEntry = await prisma.$queryRaw<Array<{ id: number }>>`
+        SELECT id FROM file_manifest 
+        WHERE "tenantId" = ${tenantSlug} AND "documentId" = ${documentId}
+        LIMIT 1
+      `;
 
-      if (manifestEntry) {
-        await prisma.fileManifest.update({
-          where: {
-            id: manifestEntry.id,
-          },
-          data: {
-            isDeleted: true,
-          },
-        });
-        console.log(`[DELETE /documents/${id}] Marked manifest entry as deleted: ${manifestEntry.id} (documentId: ${documentId})`);
+      if (manifestEntry && manifestEntry.length > 0) {
+        await prisma.$executeRaw`
+          UPDATE file_manifest 
+          SET "isDeleted" = true 
+          WHERE id = ${manifestEntry[0].id}
+        `;
+        console.log(`[DELETE /documents/${id}] Marked manifest entry as deleted: ${manifestEntry[0].id} (documentId: ${documentId})`);
       } else {
         console.warn(`[DELETE /documents/${id}] No manifest entry found for documentId: ${documentId}, tenant: ${tenantSlug}`);
       }
