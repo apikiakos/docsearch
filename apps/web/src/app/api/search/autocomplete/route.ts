@@ -165,7 +165,7 @@ export async function GET(request: Request) {
     }
 
     const statistics = Object.entries(fileTypeStats)
-      .filter(([_, count]) => count > 0) // Only include file types that have documents
+      .filter(([, count]) => count > 0) // Only include file types that have documents
       .map(([type, count]) => ({
         type,
         count,

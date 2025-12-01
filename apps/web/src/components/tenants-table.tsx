@@ -91,6 +91,7 @@ export function TenantsTable() {
     }, 500);
 
     return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
   const handleSort = (column: string) => {

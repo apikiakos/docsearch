@@ -182,7 +182,7 @@ export async function GET() {
           const queueInfo = await queueResponse.json();
           messageCount = queueInfo.messages || 0;
         }
-      } catch (queueError) {
+      } catch {
         // Queue might not exist yet, that's okay
         messageCount = 0;
       }

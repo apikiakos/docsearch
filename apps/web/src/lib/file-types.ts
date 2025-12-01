@@ -8,8 +8,6 @@ import {
   FileAudio,
   FileJson,
   FileType,
-  FileX,
-  FileCheck,
   FileQuestion,
 } from "lucide-react";
 import { LucideIcon } from "lucide-react";

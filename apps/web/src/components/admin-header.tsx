@@ -1,9 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Search } from "lucide-react";
 import { SystemStatusWidget } from "@/components/system-status-widget";
 import { signOut } from "next-auth/react";
 import {

@@ -20,7 +20,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ChevronLeft, ChevronRight, ArrowUpDown, Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 type User = {
   id: string;
@@ -95,6 +94,7 @@ export function UsersTable() {
     }, 500);
 
     return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
   const handleSort = (column: string) => {

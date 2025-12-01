@@ -23,7 +23,7 @@ const BUCKET_NAME = process.env.AWS_S3_BUCKET || "document-search-tenants";
  */
 export async function GET(request: Request) {
   try {
-    const user = await requireAuth();
+    await requireAuth();
     const url = new URL(request.url);
     const s3Key = url.searchParams.get("s3Key");
     const tenantId = url.searchParams.get("tenantId");

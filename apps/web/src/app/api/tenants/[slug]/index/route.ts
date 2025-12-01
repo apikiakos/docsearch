@@ -10,11 +10,11 @@ type Context = {
  * Compare two mappings to check if they're compatible
  * Core fields must match, but descriptive metadata fields are flexible
  */
-function mappingsCompatible(standardMapping: any, actualMapping: any): boolean {
+function mappingsCompatible(standardMapping: Record<string, unknown>, actualMapping: Record<string, unknown>): boolean {
   if (!standardMapping || !actualMapping) return false;
   
-  const standardProps = standardMapping.properties || {};
-  const actualProps = actualMapping.properties || {};
+  const standardProps = (standardMapping.properties as Record<string, unknown>) || {};
+  const actualProps = (actualMapping.properties as Record<string, unknown>) || {};
   
   // Core required fields that must exist
   const coreFields = ["id", "document_id", "tenant_id", "chunk_index", "chunk_offset", "title", "content", "metadata"];
@@ -26,16 +26,20 @@ function mappingsCompatible(standardMapping: any, actualMapping: any): boolean {
     
     // Check type compatibility for core fields (only if both have a type)
     // For complex fields like "title" with subfields, just check that the base type matches
-    if (standardProps[field]?.type && actualProps[field]?.type) {
-      if (actualProps[field].type !== standardProps[field].type) {
+    const standardField = standardProps[field] as Record<string, unknown> | undefined;
+    const actualField = actualProps[field] as Record<string, unknown> | undefined;
+    if (standardField?.type && actualField?.type) {
+      if (actualField.type !== standardField.type) {
         return false;
       }
     }
   }
   
   // Check metadata object structure
-  const standardMetadata = standardProps.metadata?.properties || {};
-  const actualMetadata = actualProps.metadata?.properties || {};
+  const standardMetadataObj = standardProps.metadata as Record<string, unknown> | undefined;
+  const actualMetadataObj = actualProps.metadata as Record<string, unknown> | undefined;
+  const standardMetadata = (standardMetadataObj?.properties as Record<string, unknown>) || {};
+  const actualMetadata = (actualMetadataObj?.properties as Record<string, unknown>) || {};
   
   if (!actualMetadata || Object.keys(actualMetadata).length === 0) {
     return false;
@@ -47,7 +51,9 @@ function mappingsCompatible(standardMapping: any, actualMapping: any): boolean {
     if (!actualMetadata[field]) {
       return false;
     }
-    if (standardMetadata[field]?.type && actualMetadata[field]?.type !== standardMetadata[field].type) {
+    const standardField = standardMetadata[field] as Record<string, unknown> | undefined;
+    const actualField = actualMetadata[field] as Record<string, unknown> | undefined;
+    if (standardField?.type && actualField?.type !== standardField.type) {
       return false;
     }
   }
@@ -60,10 +66,12 @@ function mappingsCompatible(standardMapping: any, actualMapping: any): boolean {
   
   if (hasNewStructure) {
     // New structure: verify source_url, type, and extras have correct types
-    if (actualMetadata.source_url?.type !== "keyword") {
+    const sourceUrlField = actualMetadata.source_url as Record<string, unknown> | undefined;
+    const typeField = actualMetadata.type as Record<string, unknown> | undefined;
+    if (sourceUrlField?.type !== "keyword") {
       return false;
     }
-    if (actualMetadata.type?.type !== "keyword") {
+    if (typeField?.type !== "keyword") {
       return false;
     }
     // Check if extras is an object (it should have type "object" or have properties/dynamic)
@@ -71,13 +79,13 @@ function mappingsCompatible(standardMapping: any, actualMapping: any): boolean {
     // - type === "object" 
     // - has "properties" (indicating it's an object type)
     // - has "dynamic" (indicating it's an object type)
-    const extras = actualMetadata.extras;
+    const extras = actualMetadata.extras as Record<string, unknown> | undefined;
     if (!extras) {
       return false;
     }
     
     const extrasType = extras.type;
-    const hasExtrasProperties = !!extras.properties;
+    const hasExtrasProperties = !!(extras.properties as Record<string, unknown> | undefined);
     const hasExtrasDynamic = extras.dynamic !== undefined;
     
     // If extras has an explicit type, it must be "object"
@@ -133,19 +141,26 @@ export async function GET(_request: Request, context: Context) {
     }
 
     // Check if mapping is compatible with standard mapping
-    const compatible = mappingsCompatible(standardMapping, indexInfo.mapping);
+    const compatible = mappingsCompatible(
+      standardMapping as Record<string, unknown>, 
+      (indexInfo.mapping || {}) as Record<string, unknown>
+    );
     
     // Debug: Log the compatibility check result
     if (!compatible) {
       console.log(`[DEBUG] Mapping incompatible for ${indexInfo.indexName}`);
-      const actualProps = indexInfo.mapping?.properties || {};
-      const actualMetadata = actualProps.metadata?.properties || {};
-      console.log(`[DEBUG] source_url exists: ${!!actualMetadata.source_url}, type: ${actualMetadata.source_url?.type}`);
-      console.log(`[DEBUG] type exists: ${!!actualMetadata.type}, type: ${actualMetadata.type?.type}`);
+      const actualProps = ((indexInfo.mapping as Record<string, unknown>)?.properties as Record<string, unknown>) || {};
+      const actualMetadataObj = actualProps.metadata as Record<string, unknown> | undefined;
+      const actualMetadata = (actualMetadataObj?.properties as Record<string, unknown>) || {};
+      const sourceUrlField = actualMetadata.source_url as Record<string, unknown> | undefined;
+      const typeField = actualMetadata.type as Record<string, unknown> | undefined;
+      const extrasField = actualMetadata.extras as Record<string, unknown> | undefined;
+      console.log(`[DEBUG] source_url exists: ${!!actualMetadata.source_url}, type: ${sourceUrlField?.type}`);
+      console.log(`[DEBUG] type exists: ${!!actualMetadata.type}, type: ${typeField?.type}`);
       console.log(`[DEBUG] extras exists: ${!!actualMetadata.extras}`);
-      console.log(`[DEBUG] extras type: ${actualMetadata.extras?.type}`);
-      console.log(`[DEBUG] extras has properties: ${!!actualMetadata.extras?.properties}`);
-      console.log(`[DEBUG] extras has dynamic: ${actualMetadata.extras?.dynamic !== undefined}`);
+      console.log(`[DEBUG] extras type: ${extrasField?.type}`);
+      console.log(`[DEBUG] extras has properties: ${!!extrasField?.properties}`);
+      console.log(`[DEBUG] extras has dynamic: ${extrasField?.dynamic !== undefined}`);
     }
 
     return NextResponse.json({

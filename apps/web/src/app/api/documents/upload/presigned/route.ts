@@ -17,7 +17,7 @@ function getS3Client() {
 
 export async function POST(request: Request) {
   try {
-    const user = await requireAuth();
+    await requireAuth();
     
     const body = await request.json();
     const { filename, contentType, tenantId, fileSize } = body;

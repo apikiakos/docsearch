@@ -1,10 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useDebounce } from "use-debounce";
+import { useState, useEffect } from "react";
 import SearchAutocomplete from "@/components/search-autocomplete";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -49,7 +47,6 @@ export function TenantDocuments({ tenantSlug }: TenantDocumentsProps) {
   const [bypassCache, setBypassCache] = useState(false);
   const [allowFuzzy, setAllowFuzzy] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
-  const [lastSearchedQuery, setLastSearchedQuery] = useState<string>("");
   const [metrics, setMetrics] = useState<{
     apiStart?: number;
     authTime?: number;
@@ -70,6 +67,7 @@ export function TenantDocuments({ tenantSlug }: TenantDocumentsProps) {
   // Load last 20 documents on mount
   useEffect(() => {
     loadLastDocuments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantSlug]);
 
   const loadLastDocuments = async () => {
@@ -140,7 +138,6 @@ export function TenantDocuments({ tenantSlug }: TenantDocumentsProps) {
 
     setLoading(true);
     setHasSearched(true);
-    setLastSearchedQuery(searchQuery.trim());
     setMetrics(null);
     const browserStart = performance.now();
 

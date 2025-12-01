@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, hasTenantAccess } from "@/lib/auth-helpers";
 import { readFile } from "fs/promises";
 import { existsSync } from "fs";
-import { join } from "path";
+import { resolve } from "path";
 
 /**
  * Serve local files for document preview
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     let user;
     try {
       user = await requireAuth();
-    } catch (error) {
+    } catch {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -40,7 +40,6 @@ export async function GET(request: NextRequest) {
     // Security: Only allow files from workers/data directory
     // The path from producer is an absolute path
     // We need to validate it's within the project's workers/data directory
-    const { resolve } = require("path");
     
     // Get project root
     // In Next.js, process.cwd() is the project root (where next.config.js is)

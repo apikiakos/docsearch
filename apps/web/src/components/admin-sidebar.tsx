@@ -8,11 +8,9 @@ import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard,
   Search,
-  FileText,
   Settings,
   Building2,
   Users,
-  Database,
 } from "lucide-react";
 
 type NavItem = {

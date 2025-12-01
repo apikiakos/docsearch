@@ -19,7 +19,7 @@ import { useSession } from "next-auth/react";
 
 export default function DocumentUploadPage() {
   const router = useRouter();
-  const { data: session } = useSession();
+  useSession(); // Keep session check for auth, but don't use the data
   const [file, setFile] = useState<File | null>(null);
   const [tenantId, setTenantId] = useState<string>("");
   const [userTenants, setUserTenants] = useState<Array<{ slug: string; name: string }>>([]);

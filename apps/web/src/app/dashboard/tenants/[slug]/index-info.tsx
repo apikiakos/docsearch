@@ -23,9 +23,9 @@ type IndexInfo = {
   documentCount: number;
   chunkCount: number;
   size: number;
-  mapping?: any;
+  mapping?: Record<string, unknown>;
   mappingCompatible?: boolean;
-  standardMapping?: any;
+  standardMapping?: Record<string, unknown>;
 };
 
 interface IndexInfoProps {
@@ -223,7 +223,7 @@ export function IndexInfo({ tenantSlug }: IndexInfoProps) {
                         <p className="font-medium mb-1">Multi-Tenant Search Strategy</p>
                         <p className="mb-2">All tenant indices use the same core mapping structure. When searching across multiple tenants, Elasticsearch searches all indices simultaneously using a comma-separated index pattern (e.g., <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">docs_tenant1,docs_tenant2</code>).</p>
                         <p className="mb-2"><strong>Core Fields:</strong> All indices must have identical core field mappings (id, document_id, tenant_id, title, content, metadata object structure) for consistent query behavior.</p>
-                        <p><strong>Descriptive Metadata:</strong> Additional metadata fields (book_id, s3_bucket, html_meta, etc.) are optional and type-specific. They're stored in the metadata object with dynamic mapping enabled, allowing different document types to have different descriptive fields without breaking compatibility.</p>
+                        <p><strong>Descriptive Metadata:</strong> Additional metadata fields (book_id, s3_bucket, html_meta, etc.) are optional and type-specific. They&apos;re stored in the metadata object with dynamic mapping enabled, allowing different document types to have different descriptive fields without breaking compatibility.</p>
                       </div>
                     </div>
                   </div>

@@ -57,14 +57,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
-        token.memberships = (user as any).memberships || [];
+        token.memberships = (user as { memberships?: unknown[] }).memberships || [];
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
-        session.user.memberships = (token.memberships as any) || [];
+        session.user.memberships = (token.memberships as Array<{
+          tenantId: string;
+          tenantSlug: string;
+          role: string;
+        }>) || [];
       }
       return session;
     },

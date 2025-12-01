@@ -130,7 +130,7 @@ export async function getIndexInfo(tenantSlug: string) {
     
     // Get unique document count (not chunk count)
     let uniqueDocumentCount = 0;
-    let totalChunkCount = indexStats?.total?.docs?.count || 0;
+    const totalChunkCount = indexStats?.total?.docs?.count || 0;
     
     try {
       const searchResult = await elasticsearch.search({

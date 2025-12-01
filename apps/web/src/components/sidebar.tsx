@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { 
   Search, 
-  FileText, 
   Settings, 
   LayoutDashboard 
 } from "lucide-react";

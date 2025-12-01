@@ -80,7 +80,7 @@ export async function GET(request: Request) {
             },
           });
           documentCount = (aggResult.aggregations?.unique_documents as { value: number })?.value || 0;
-        } catch (error) {
+        } catch {
           // If index doesn't exist or there's an error, documentCount remains 0
           // This is expected for tenants that haven't been indexed yet
         }

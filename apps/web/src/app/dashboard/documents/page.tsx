@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { useDebounce } from "use-debounce";
 import { PageHeader } from "@/components/page-header";
 import SearchAutocomplete from "@/components/search-autocomplete";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -83,11 +82,11 @@ export default function SearchPage() {
     fuzzySearchMetrics?: { time: number; took: number; hits: number } | null;
   } | null>(null);
   
-  // Debounced statistics for autocomplete
-  const [debouncedQuery] = useDebounce(query, 300);
-  const [statisticsTotal, setStatisticsTotal] = useState(0);
-  const [statisticsLoading, setStatisticsLoading] = useState(false);
-  const [statisticsQueryTime, setStatisticsQueryTime] = useState<number | null>(null);
+  // Debounced statistics for autocomplete (temporarily disabled)
+  // const [debouncedQuery] = useDebounce(query, 300);
+  // const [statisticsTotal, setStatisticsTotal] = useState(0);
+  // const [statisticsLoading, setStatisticsLoading] = useState(false);
+  // const [statisticsQueryTime, setStatisticsQueryTime] = useState<number | null>(null);
 
   // Fetch user's accessible tenants with document counts
   useEffect(() => {
@@ -110,52 +109,52 @@ export default function SearchPage() {
     fetchTenants();
   }, []);
 
-  // Fetch debounced statistics for autocomplete
-  const fetchStatistics = useCallback(async (searchQuery: string, searchTenant: string) => {
-    if (!searchQuery.trim() || searchQuery.length < 2) {
-      setStatisticsTotal(0);
-      setStatisticsQueryTime(null);
-      return;
-    }
-
-    setStatisticsLoading(true);
-    try {
-      const params = new URLSearchParams({
-        q: searchQuery,
-        ...(searchTenant && searchTenant !== "all" && { tenant: searchTenant }),
-      });
-
-      const response = await fetch(`/api/search/autocomplete?${params}`);
-      if (response.ok) {
-        const data = await response.json();
-        const total = data.total ?? 0;
-        const queryTime = data.metrics?.totalTime ?? null;
-        
-        setStatisticsTotal(total);
-        setStatisticsQueryTime(queryTime);
-        
-        // Debug logging
-        if (total === 0 && searchQuery.length >= 2) {
-          console.log("[SearchPage] Autocomplete returned 0 documents for query:", searchQuery, {
-            statistics: data.statistics,
-            metrics: data.metrics,
-            total: data.total,
-          });
-        }
-      } else {
-        const errorText = await response.text();
-        console.error("[SearchPage] Autocomplete API error:", response.status, errorText);
-        setStatisticsTotal(0);
-        setStatisticsQueryTime(null);
-      }
-    } catch (error) {
-      console.error("Error fetching statistics:", error);
-      setStatisticsTotal(0);
-      setStatisticsQueryTime(null);
-    } finally {
-      setStatisticsLoading(false);
-    }
-  }, []);
+  // Fetch debounced statistics for autocomplete (temporarily disabled)
+  // const fetchStatistics = useCallback(async (searchQuery: string, searchTenant: string) => {
+  //   if (!searchQuery.trim() || searchQuery.length < 2) {
+  //     setStatisticsTotal(0);
+  //     setStatisticsQueryTime(null);
+  //     return;
+  //   }
+  //
+  //   setStatisticsLoading(true);
+  //   try {
+  //     const params = new URLSearchParams({
+  //       q: searchQuery,
+  //       ...(searchTenant && searchTenant !== "all" && { tenant: searchTenant }),
+  //     });
+  //
+  //     const response = await fetch(`/api/search/autocomplete?${params}`);
+  //     if (response.ok) {
+  //       const data = await response.json();
+  //       const total = data.total ?? 0;
+  //       const queryTime = data.metrics?.totalTime ?? null;
+  //       
+  //       setStatisticsTotal(total);
+  //       setStatisticsQueryTime(queryTime);
+  //       
+  //       // Debug logging
+  //       if (total === 0 && searchQuery.length >= 2) {
+  //         console.log("[SearchPage] Autocomplete returned 0 documents for query:", searchQuery, {
+  //           statistics: data.statistics,
+  //           metrics: data.metrics,
+  //           total: data.total,
+  //         });
+  //       }
+  //     } else {
+  //       const errorText = await response.text();
+  //       console.error("[SearchPage] Autocomplete API error:", response.status, errorText);
+  //       setStatisticsTotal(0);
+  //       setStatisticsQueryTime(null);
+  //     }
+  //   } catch (error) {
+  //     console.error("Error fetching statistics:", error);
+  //     setStatisticsTotal(0);
+  //     setStatisticsQueryTime(null);
+  //   } finally {
+  //     setStatisticsLoading(false);
+  //   }
+  // }, []);
 
   // Temporarily disabled: Fetch statistics when debounced query changes
   // This was using a different query (old fuzzy logic) and doesn't match the new exact/fuzzy search
