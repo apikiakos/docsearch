@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { signIn, getCsrfToken } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,22 @@ export default function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [csrfToken, setCsrfToken] = useState<string>("");
+
+  // Fetch CSRF token on mount
+  useEffect(() => {
+    const fetchCsrfToken = async () => {
+      try {
+        const token = await getCsrfToken();
+        if (token) {
+          setCsrfToken(token);
+        }
+      } catch (err) {
+        console.error("Error fetching CSRF token:", err);
+      }
+    };
+    fetchCsrfToken();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,6 +37,16 @@ export default function LoginForm() {
     setLoading(true);
 
     try {
+      // In development, fetch CSRF token multiple times to ensure it's set in cookies
+      if (process.env.NODE_ENV === "development") {
+        // Fetch CSRF token to ensure cookie is set
+        await getCsrfToken();
+        // Small delay to ensure cookie is set
+        await new Promise(resolve => setTimeout(resolve, 100));
+        // Fetch again to confirm
+        await getCsrfToken();
+      }
+
       const result = await signIn("credentials", {
         email,
         password,
@@ -28,12 +54,18 @@ export default function LoginForm() {
       });
 
       if (result?.error) {
-        setError("Invalid email or password");
+        // Check if it's a CSRF error
+        if (result.error.includes("CSRF") || result.error.includes("csrf")) {
+          setError("CSRF token error. Please refresh the page and try again.");
+        } else {
+          setError("Invalid email or password");
+        }
       } else {
         router.push("/dashboard");
         router.refresh();
       }
-    } catch {
+    } catch (err) {
+      console.error("Sign-in error:", err);
       setError("An error occurred. Please try again.");
     } finally {
       setLoading(false);
