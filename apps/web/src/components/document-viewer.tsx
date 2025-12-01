@@ -346,6 +346,35 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
     }
   }, [content, fileType, originalUrl, metadata, useIframeForRemote, useLocalFileUrl, localFileUrl, isS3Source, s3PresignedUrl, useDocxViewer, docxViewerUrl]);
 
+  // Monitor iframe src to prevent old Gutenberg URLs from being set
+  useEffect(() => {
+    if (!iframeRef.current || !useIframeForRemote || source !== "gutendex") return;
+    
+    const iframe = iframeRef.current;
+    const checkSrc = () => {
+      const currentSrc = iframe.src;
+      if (currentSrc && (currentSrc.includes("cache/epub") || (currentSrc.includes("/pg") && currentSrc.includes(".txt") && !currentSrc.includes("ebooks")))) {
+        console.error("[DocumentViewer] Detected old Gutenberg URL in iframe src, blocking:", currentSrc);
+        // Block the old URL and use the correct one
+        if (remoteUrl && !remoteUrl.includes("cache/epub") && !(remoteUrl.includes("/pg") && remoteUrl.includes(".txt") && !remoteUrl.includes("ebooks"))) {
+          const correctUrl = ensureHttps(remoteUrl) || remoteUrl;
+          console.log("[DocumentViewer] Setting correct URL:", correctUrl);
+          iframe.src = correctUrl;
+        }
+      }
+    };
+    
+    // Check immediately and after a short delay (in case of redirects)
+    checkSrc();
+    const timeout = setTimeout(checkSrc, 100);
+    const interval = setInterval(checkSrc, 500);
+    
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(interval);
+    };
+  }, [useIframeForRemote, source, remoteUrl]);
+
   if (["JPG", "JPEG", "PNG", "GIF", "SVG", "WEBP"].includes(fileType) && !originalUrl) {
     // Images displayed directly in container
     return (
