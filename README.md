@@ -2,6 +2,14 @@
 
 A prototype distributed document search service with multi-tenancy support, built for enterprise technical assessment.
 
+## Prerequisites
+
+- **Node.js**: v20.19.6 (required - use `nvm use` or `fnm use` to switch versions)
+- **pnpm**: >=9.7.0
+- **Docker**: For running PostgreSQL, Elasticsearch, Redis, and RabbitMQ
+
+The project includes `.nvmrc` and `.node-version` files for automatic version switching.
+
 ## Quick Start
 
 ### 1. Start Services
