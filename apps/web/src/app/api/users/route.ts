@@ -61,13 +61,13 @@ export async function GET(request: Request) {
     ]);
 
     return NextResponse.json({
-      users: users.map((u) => ({
+      users: users.map((u: { id: string; email: string; name: string | null; createdAt: Date; updatedAt: Date; memberships: Array<{ tenant: { slug: string; name: string }; role: string }> }) => ({
         id: u.id,
         email: u.email,
         name: u.name,
         createdAt: u.createdAt,
         updatedAt: u.updatedAt,
-        memberships: u.memberships.map((m) => ({
+        memberships: u.memberships.map((m: { tenant: { slug: string; name: string }; role: string }) => ({
           tenantSlug: m.tenant.slug,
           tenantName: m.tenant.name,
           role: m.role,
