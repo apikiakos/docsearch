@@ -24,7 +24,7 @@ export async function GET() {
 
     // Get document counts for each tenant from Elasticsearch
     const tenantsWithCounts = await Promise.all(
-      tenants.map(async (t) => {
+      tenants.map(async (t: { id: string; slug: string; name: string }) => {
         let documentCount = 0;
         try {
           const indexName = getTenantIndex(t.slug);
