@@ -28,22 +28,38 @@ export async function GET() {
         let documentCount = 0;
         try {
           const indexName = getTenantIndex(t.slug);
-          // Count unique documents by using a cardinality aggregation on document_id
-          const aggResult = await elasticsearch.search({
-            index: indexName,
-            size: 0,
-            aggs: {
-              unique_documents: {
-                cardinality: {
-                  field: "document_id",
+          // Check if index exists first
+          const indexExists = await elasticsearch.indices.exists({ index: indexName });
+          if (!indexExists) {
+            // Index doesn't exist yet - this is normal for new tenants
+            documentCount = 0;
+          } else {
+            // Count unique documents by using a cardinality aggregation on document_id
+            const aggResult = await elasticsearch.search({
+              index: indexName,
+              size: 0,
+              aggs: {
+                unique_documents: {
+                  cardinality: {
+                    field: "document_id",
+                  },
                 },
               },
-            },
-          });
-          documentCount = (aggResult.aggregations?.unique_documents as { value: number })?.value || 0;
+            });
+            documentCount = (aggResult.aggregations?.unique_documents as { value: number })?.value || 0;
+          }
         } catch (error) {
           // If index doesn't exist or there's an error, documentCount remains 0
-          console.error(`Error getting document count for tenant ${t.slug}:`, error);
+          // Only log non-index-not-found errors to avoid noise
+          if (error && typeof error === "object" && "meta" in error) {
+            const meta = (error as { meta?: { body?: { error?: { type?: string } } } }).meta;
+            const errorType = meta?.body?.error?.type;
+            if (errorType !== "index_not_found_exception") {
+              console.error(`Error getting document count for tenant ${t.slug}:`, error);
+            }
+          } else {
+            console.error(`Error getting document count for tenant ${t.slug}:`, error);
+          }
         }
 
         return {
@@ -62,6 +78,8 @@ export async function GET() {
         const totalResult = await elasticsearch.search({
           index: indexPattern,
           size: 0,
+          allow_no_indices: true,
+          ignore_unavailable: true,
           aggs: {
             unique_documents: {
               cardinality: {
@@ -74,7 +92,16 @@ export async function GET() {
       }
     } catch (error) {
       // Fallback to summing individual counts if multi-index query fails
-      console.error("Error getting total document count:", error);
+      // Only log non-index-not-found errors
+      if (error && typeof error === "object" && "meta" in error) {
+        const meta = (error as { meta?: { body?: { error?: { type?: string } } } }).meta;
+        const errorType = meta?.body?.error?.type;
+        if (errorType !== "index_not_found_exception") {
+          console.error("Error getting total document count:", error);
+        }
+      } else {
+        console.error("Error getting total document count:", error);
+      }
       totalDocuments = tenantsWithCounts.reduce((sum: number, t: { id: string; slug: string; name: string; documentCount: number }) => sum + t.documentCount, 0);
     }
 

@@ -67,22 +67,37 @@ export async function GET(request: Request) {
         let documentCount = 0;
         try {
           const indexName = getTenantIndex(t.slug);
-          // Count unique documents by using a cardinality aggregation on document_id
-          const aggResult = await elasticsearch.search({
-            index: indexName,
-            size: 0,
-            aggs: {
-              unique_documents: {
-                cardinality: {
-                  field: "document_id",
+          // Check if index exists first
+          const indexExists = await elasticsearch.indices.exists({ index: indexName });
+          if (!indexExists) {
+            // Index doesn't exist yet - this is normal for new tenants
+            documentCount = 0;
+          } else {
+            // Count unique documents by using a cardinality aggregation on document_id
+            const aggResult = await elasticsearch.search({
+              index: indexName,
+              size: 0,
+              aggs: {
+                unique_documents: {
+                  cardinality: {
+                    field: "document_id",
+                  },
                 },
               },
-            },
-          });
-          documentCount = (aggResult.aggregations?.unique_documents as { value: number })?.value || 0;
-        } catch {
+            });
+            documentCount = (aggResult.aggregations?.unique_documents as { value: number })?.value || 0;
+          }
+        } catch (error) {
           // If index doesn't exist or there's an error, documentCount remains 0
           // This is expected for tenants that haven't been indexed yet
+          // Only log non-index-not-found errors to avoid noise
+          if (error && typeof error === "object" && "meta" in error) {
+            const meta = (error as { meta?: { body?: { error?: { type?: string } } } }).meta;
+            const errorType = meta?.body?.error?.type;
+            if (errorType !== "index_not_found_exception") {
+              console.error(`Error getting document count for tenant ${t.slug}:`, error);
+            }
+          }
         }
 
         return {
