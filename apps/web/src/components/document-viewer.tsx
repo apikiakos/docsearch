@@ -90,16 +90,48 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
   // For Gutenberg books and other remote sources, prefer iframe with originalUrl
   // Ensure URL is HTTPS to prevent mixed content errors
   // Prefer sourceUrl if it's HTTPS and originalUrl is HTTP (to avoid old indexed URLs)
+  // Also check for old Gutenberg URL patterns and prefer the new format
   let remoteUrlCandidate: string | undefined;
-  if (sourceUrl && sourceUrl.startsWith("https://")) {
-    // Prefer HTTPS sourceUrl over potentially old HTTP originalUrl
-    remoteUrlCandidate = sourceUrl;
-  } else if (originalUrl) {
-    remoteUrlCandidate = originalUrl;
+  
+  // Helper function to check if URL is an old Gutenberg cache/epub pattern
+  const isOldGutenbergUrl = (url: string | undefined): boolean => {
+    if (!url) return false;
+    return url.includes("cache/epub") || url.includes("/pg") && url.includes(".txt") && !url.includes("ebooks");
+  };
+  
+  // For Gutenberg sources, always prefer sourceUrl if it exists and is HTTPS
+  // Explicitly reject old cache/epub URL patterns
+  if (source === "gutendex") {
+    // First, try to find a valid HTTPS URL that's not the old pattern
+    if (sourceUrl && sourceUrl.startsWith("https://") && !isOldGutenbergUrl(sourceUrl)) {
+      remoteUrlCandidate = sourceUrl;
+    } else if (originalUrl && originalUrl.startsWith("https://") && !isOldGutenbergUrl(originalUrl)) {
+      remoteUrlCandidate = originalUrl;
+    } else if (sourceUrl && !isOldGutenbergUrl(sourceUrl)) {
+      // Even if not HTTPS, prefer sourceUrl if it's not the old pattern
+      remoteUrlCandidate = sourceUrl;
+    } else if (originalUrl && !isOldGutenbergUrl(originalUrl)) {
+      // Even if not HTTPS, prefer originalUrl if it's not the old pattern
+      remoteUrlCandidate = originalUrl;
+    } else {
+      // Last resort: use sourceUrl or originalUrl even if old pattern (will be converted to HTTPS)
+      remoteUrlCandidate = sourceUrl || originalUrl;
+    }
   } else {
-    remoteUrlCandidate = sourceUrl;
+    // For other sources, prefer HTTPS URLs
+    if (sourceUrl && sourceUrl.startsWith("https://")) {
+      remoteUrlCandidate = sourceUrl;
+    } else if (originalUrl && originalUrl.startsWith("https://")) {
+      remoteUrlCandidate = originalUrl;
+    } else if (sourceUrl) {
+      remoteUrlCandidate = sourceUrl;
+    } else if (originalUrl) {
+      remoteUrlCandidate = originalUrl;
+    }
   }
+  
   const useIframeForRemote = remoteUrlCandidate && (source === "gutendex" || remoteUrlCandidate.startsWith("http"));
+  // Always ensure HTTPS conversion for remote URLs
   const remoteUrl = useIframeForRemote && remoteUrlCandidate ? ensureHttps(remoteUrlCandidate) || remoteUrlCandidate : null;
   
   // For local files, use the API route
@@ -354,7 +386,15 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
                   ? localFileUrl! 
                   : (isS3Source && s3PresignedUrl)
                     ? s3PresignedUrl
-                    : (remoteUrl ? ensureHttps(remoteUrl) || remoteUrl : undefined)
+                    : (remoteUrl ? (() => {
+                        // Double-check HTTPS conversion and ensure we're using the correct URL
+                        const finalUrl = ensureHttps(remoteUrl) || remoteUrl;
+                        // For Gutenberg sources, if we detect an old cache/epub URL pattern, log a warning
+                        if (source === "gutendex" && finalUrl.includes("cache/epub") && !finalUrl.includes("ebooks")) {
+                          console.warn("[DocumentViewer] Using old Gutenberg URL format. Consider reindexing this document:", finalUrl);
+                        }
+                        return finalUrl;
+                      })() : undefined)
               }
               className="w-full border-0"
               style={{ minHeight: "600px", display: "block" }}
