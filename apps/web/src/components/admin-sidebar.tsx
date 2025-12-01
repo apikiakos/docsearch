@@ -79,6 +79,11 @@ interface AdminSidebarProps {
   user: {
     email: string;
     name?: string | null;
+    memberships?: Array<{
+      tenantId: string;
+      tenantSlug: string;
+      role: string;
+    }>;
   };
 }
 
