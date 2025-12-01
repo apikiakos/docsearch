@@ -75,7 +75,7 @@ export async function GET() {
     } catch (error) {
       // Fallback to summing individual counts if multi-index query fails
       console.error("Error getting total document count:", error);
-      totalDocuments = tenantsWithCounts.reduce((sum, t) => sum + t.documentCount, 0);
+      totalDocuments = tenantsWithCounts.reduce((sum: number, t: { id: string; slug: string; name: string; documentCount: number }) => sum + t.documentCount, 0);
     }
 
     return NextResponse.json({ 

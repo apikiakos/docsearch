@@ -578,7 +578,7 @@ export async function GET(request: Request) {
               ...existing.highlights,
               ...contentHighlights,
             ]
-              .filter((h, i, arr) => arr.indexOf(h) === i); // Remove duplicates
+              .filter((h: string, i: number, arr: string[]) => arr.indexOf(h) === i); // Remove duplicates
             
             existing.highlights = allHighlights.slice(0, 2); // Limit to 2 highlights
           }
@@ -596,7 +596,7 @@ export async function GET(request: Request) {
     const results = allResults.slice(startIndex, endIndex);
 
     const facets = Object.entries(fileTypeFacets)
-      .map(([type, count]) => ({
+      .map(([type, count]: [string, number]) => ({
         type,
         count,
       }))
