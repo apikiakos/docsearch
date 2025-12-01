@@ -217,20 +217,27 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
     // For Gutenberg TXT files, display content directly instead of iframe to avoid redirects
     if (source === "gutendex" && fileType === "TXT" && content) {
       // We already have the full book content, display it directly
-      if (!containerRef.current) return;
-      const container = containerRef.current;
-      const bookTitle = (extras?.title as string | undefined) || (metadata?.title as string | undefined) || filename || "Gutenberg Book";
-      const bookAuthor = extras?.author as string | undefined;
-      container.innerHTML = `
-        <div style="padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.8; max-width: 1200px; margin: 0 auto; background: #fff;">
-          <div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 2px solid #e5e7eb;">
-            <h1 style="font-size: 2em; margin: 0 0 10px 0; color: #111827;">${escapeHtml(bookTitle)}</h1>
-            ${bookAuthor ? `<p style="font-size: 1.1em; color: #6b7280; margin: 0;">by ${escapeHtml(bookAuthor)}</p>` : ""}
+      // Use a small delay to ensure container is mounted
+      const renderContent = () => {
+        if (!containerRef.current) {
+          setTimeout(renderContent, 50);
+          return;
+        }
+        const container = containerRef.current;
+        const bookTitle = (extras?.title as string | undefined) || (metadata?.title as string | undefined) || filename || "Gutenberg Book";
+        const bookAuthor = extras?.author as string | undefined;
+        container.innerHTML = `
+          <div style="padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.8; max-width: 1200px; margin: 0 auto; background: #fff;">
+            <div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 2px solid #e5e7eb;">
+              <h1 style="font-size: 2em; margin: 0 0 10px 0; color: #111827;">${escapeHtml(bookTitle)}</h1>
+              ${bookAuthor ? `<p style="font-size: 1.1em; color: #6b7280; margin: 0;">by ${escapeHtml(bookAuthor)}</p>` : ""}
+            </div>
+            <div style="white-space: pre-wrap; word-wrap: break-word; font-size: 16px; color: #374151; line-height: 1.8;">${escapeHtml(content)}</div>
           </div>
-          <div style="white-space: pre-wrap; word-wrap: break-word; font-size: 16px; color: #374151; line-height: 1.8;">${escapeHtml(content)}</div>
-        </div>
-      `;
-      setTimeout(() => setViewerReady(true), 0);
+        `;
+        setViewerReady(true);
+      };
+      renderContent();
       return;
     }
 
@@ -429,6 +436,9 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
     );
   }
 
+  // For Gutenberg TXT files, display content directly (handled in useEffect)
+  const isGutenbergTxt = source === "gutendex" && fileType === "TXT";
+
   return (
     <Card>
       <CardContent className="p-0">
@@ -448,7 +458,11 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
               </div>
             </div>
           )}
-          {(fileType === "PDF" || fileType === "HTML" || fileType === "HTM" || (useIframeForRemote && !(source === "gutendex" && fileType === "TXT")) || useLocalFileUrl || (isS3Source && s3PresignedUrl) || useDocxViewer) && (
+          {/* For Gutenberg TXT, display content in container instead of iframe */}
+          {isGutenbergTxt ? (
+            <div ref={containerRef} className="w-full overflow-auto" style={{ minHeight: "600px", maxHeight: "80vh" }} />
+          ) : (
+            (fileType === "PDF" || fileType === "HTML" || fileType === "HTM" || useIframeForRemote || useLocalFileUrl || (isS3Source && s3PresignedUrl) || useDocxViewer) && (
             <iframe
               ref={iframeRef}
               src={
