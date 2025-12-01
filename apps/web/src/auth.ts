@@ -17,6 +17,7 @@ const getAuthUrl = () => {
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true, // Trust host to avoid CSRF issues
   url: getAuthUrl(), // Use internal URL in dev, production URL in prod
+  skipCSRFCheck: process.env.NODE_ENV === "development", // Skip CSRF check in development only
   providers: [
     Credentials({
       credentials: {
