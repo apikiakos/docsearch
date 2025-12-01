@@ -4,9 +4,19 @@ import { prisma } from "./lib/prisma";
 import bcrypt from "bcryptjs";
 import type { TenantRole } from "@distributed-docsearch/core/tenant";
 
+// Determine the correct URL based on environment
+// In development, use NEXTAUTH_URL_INTERNAL if set, otherwise use localhost
+// In production, use AUTH_URL or NEXTAUTH_URL
+const getAuthUrl = () => {
+  if (process.env.NODE_ENV === "development") {
+    return process.env.NEXTAUTH_URL_INTERNAL || process.env.AUTH_URL || "http://localhost:3000";
+  }
+  return process.env.AUTH_URL || process.env.NEXTAUTH_URL;
+};
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  trustHost: process.env.NODE_ENV === "development", // Trust host in development to avoid CSRF issues
-  url: process.env.AUTH_URL || process.env.NEXTAUTH_URL, // Use AUTH_URL if set, fallback to NEXTAUTH_URL
+  trustHost: true, // Trust host to avoid CSRF issues
+  url: getAuthUrl(), // Use internal URL in dev, production URL in prod
   providers: [
     Credentials({
       credentials: {

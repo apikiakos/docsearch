@@ -192,11 +192,13 @@ DATABASE_URL="postgresql://postgres:postgres@localhost:5432/docsearch?schema=pub
 
 # NextAuth
 AUTH_SECRET="your-secret-key-here-change-in-production"
-# For development (localhost)
-AUTH_URL="http://localhost:3000"
-# For production, set AUTH_URL to your production URL
-# AUTH_URL="https://your-production-domain.com"
-# Note: NEXTAUTH_URL is also supported for backward compatibility
+# For production (public URL)
+NEXTAUTH_URL="https://your-production-domain.com"
+# For development (internal URL - used for callbacks in dev)
+NEXTAUTH_URL_INTERNAL="http://localhost:3000"
+# Alternative: Use AUTH_URL (NextAuth v5 preferred)
+# AUTH_URL="http://localhost:3000"  # for dev
+# AUTH_URL="https://your-production-domain.com"  # for prod
 
 # Elasticsearch
 ELASTICSEARCH_URL="http://localhost:9200"
