@@ -214,6 +214,24 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
       return; // Wait for presigned URL to be fetched
     }
 
+    // For Gutenberg TXT files, display content directly instead of iframe to avoid redirects
+    if (source === "gutendex" && fileType === "TXT" && content) {
+      // We already have the full book content, display it directly
+      if (!containerRef.current) return;
+      const container = containerRef.current;
+      container.innerHTML = `
+        <div style="padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.8; max-width: 1200px; margin: 0 auto; background: #fff;">
+          <div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 2px solid #e5e7eb;">
+            <h1 style="font-size: 2em; margin: 0 0 10px 0; color: #111827;">${metadata?.extras?.title || metadata?.title || filename || "Gutenberg Book"}</h1>
+            ${metadata?.extras?.author ? `<p style="font-size: 1.1em; color: #6b7280; margin: 0;">by ${metadata.extras.author}</p>` : ""}
+          </div>
+          <div style="white-space: pre-wrap; word-wrap: break-word; font-size: 16px; color: #374151; line-height: 1.8;">${escapeHtml(content)}</div>
+        </div>
+      `;
+      setTimeout(() => setViewerReady(true), 0);
+      return;
+    }
+
     // For local files, remote sources, S3 files with presigned URL, or DOCX with viewer URL, iframe src is set directly in JSX
     // Set viewerReady immediately so the iframe is visible
     if (useLocalFileUrl || useIframeForRemote || (isS3Source && s3PresignedUrl) || useDocxViewer) {
@@ -347,30 +365,53 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
   }, [content, fileType, originalUrl, metadata, useIframeForRemote, useLocalFileUrl, localFileUrl, isS3Source, s3PresignedUrl, useDocxViewer, docxViewerUrl]);
 
   // Monitor iframe src to prevent old Gutenberg URLs from being set
+  // Also handle Gutenberg redirects by fetching content directly if needed
   useEffect(() => {
-    if (!iframeRef.current || !useIframeForRemote || source !== "gutendex") return;
+    if (!iframeRef.current || !useIframeForRemote || source !== "gutendex" || !remoteUrl) return;
     
     const iframe = iframeRef.current;
+    let checkCount = 0;
+    const maxChecks = 10; // Check for 5 seconds (10 * 500ms)
+    
     const checkSrc = () => {
+      checkCount++;
+      if (checkCount > maxChecks) {
+        return; // Stop checking after max attempts
+      }
+      
       const currentSrc = iframe.src;
       if (currentSrc && (currentSrc.includes("cache/epub") || (currentSrc.includes("/pg") && currentSrc.includes(".txt") && !currentSrc.includes("ebooks")))) {
-        console.error("[DocumentViewer] Detected old Gutenberg URL in iframe src, blocking:", currentSrc);
+        console.error("[DocumentViewer] Detected old Gutenberg URL in iframe src (possibly redirected), blocking:", currentSrc);
         // Block the old URL and use the correct one
-        if (remoteUrl && !remoteUrl.includes("cache/epub") && !(remoteUrl.includes("/pg") && remoteUrl.includes(".txt") && !remoteUrl.includes("ebooks"))) {
-          const correctUrl = ensureHttps(remoteUrl) || remoteUrl;
-          console.log("[DocumentViewer] Setting correct URL:", correctUrl);
+        const correctUrl = ensureHttps(remoteUrl) || remoteUrl;
+        if (correctUrl && !correctUrl.includes("cache/epub") && !(correctUrl.includes("/pg") && correctUrl.includes(".txt") && !correctUrl.includes("ebooks"))) {
+          console.log("[DocumentViewer] Resetting to correct URL:", correctUrl);
           iframe.src = correctUrl;
+        } else {
+          // If correct URL also has issues, fetch content directly and display in blob
+          console.log("[DocumentViewer] Fetching Gutenberg content directly to avoid redirects");
+          fetch(correctUrl, { mode: "cors" })
+            .then(res => res.text())
+            .then(text => {
+              const blob = new Blob([text], { type: "text/plain" });
+              const blobUrl = URL.createObjectURL(blob);
+              if (iframe.src !== blobUrl) {
+                iframe.src = blobUrl;
+                console.log("[DocumentViewer] Using blob URL to avoid redirects");
+              }
+            })
+            .catch(err => {
+              console.error("[DocumentViewer] Failed to fetch content directly:", err);
+            });
         }
       }
     };
     
-    // Check immediately and after a short delay (in case of redirects)
+    // Check immediately and periodically (in case of redirects)
     checkSrc();
-    const timeout = setTimeout(checkSrc, 100);
     const interval = setInterval(checkSrc, 500);
     
     return () => {
-      clearTimeout(timeout);
       clearInterval(interval);
     };
   }, [useIframeForRemote, source, remoteUrl]);
@@ -405,7 +446,7 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
               </div>
             </div>
           )}
-          {(fileType === "PDF" || fileType === "HTML" || fileType === "HTM" || useIframeForRemote || useLocalFileUrl || (isS3Source && s3PresignedUrl) || useDocxViewer) && (
+          {(fileType === "PDF" || fileType === "HTML" || fileType === "HTM" || (useIframeForRemote && !(source === "gutendex" && fileType === "TXT")) || useLocalFileUrl || (isS3Source && s3PresignedUrl) || useDocxViewer) && (
             <iframe
               ref={iframeRef}
               src={
