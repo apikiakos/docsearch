@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Database, HardDrive, Copy, CheckCircle2, XCircle, FileCode, AlertCircle } from "lucide-react";
+import { Loader2, Database, HardDrive, Copy, CheckCircle2, XCircle, FileCode, AlertCircle, Trash2 } from "lucide-react";
 import {
   Collapsible,
   CollapsibleContent,
@@ -11,6 +11,16 @@ import {
 } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { ChevronDown } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 
 type IndexInfo = {
   indexName: string;
@@ -37,6 +47,9 @@ export function IndexInfo({ tenantSlug }: IndexInfoProps) {
   const [loading, setLoading] = useState(true);
   const [mappingOpen, setMappingOpen] = useState(false);
   const [standardMappingOpen, setStandardMappingOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [clearManifest, setClearManifest] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     const fetchIndexInfo = async () => {
@@ -64,15 +77,77 @@ export function IndexInfo({ tenantSlug }: IndexInfoProps) {
     return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
   };
 
+  const handleDeleteIndex = async () => {
+    setDeleting(true);
+    try {
+      const response = await fetch(`/api/tenants/${tenantSlug}/index`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          clearManifest,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to delete index");
+      }
+
+      // Refresh index info (will show as non-existent)
+      setIndexInfo(null);
+      setDeleteDialogOpen(false);
+      setClearManifest(false);
+      
+      // Refetch index info
+      const fetchIndexInfo = async () => {
+        try {
+          const infoResponse = await fetch(`/api/tenants/${tenantSlug}/index`);
+          if (infoResponse.ok) {
+            const data = await infoResponse.json();
+            setIndexInfo(data);
+          }
+        } catch (error) {
+          console.error("Error fetching index info:", error);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchIndexInfo();
+    } catch (error) {
+      console.error("Error deleting index:", error);
+      alert(error instanceof Error ? error.message : "Failed to delete index");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Database className="h-5 w-5" />
-          Elasticsearch Index
-        </CardTitle>
-        <CardDescription>Index configuration and statistics</CardDescription>
-      </CardHeader>
+    <>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Database className="h-5 w-5" />
+                Elasticsearch Index
+              </CardTitle>
+              <CardDescription>Index configuration and statistics</CardDescription>
+            </div>
+            {indexInfo && indexInfo.exists && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setDeleteDialogOpen(true)}
+                className="flex items-center gap-2"
+              >
+                <Trash2 className="h-4 w-4" />
+                Dump Index
+              </Button>
+            )}
+          </div>
+        </CardHeader>
       <CardContent>
         {loading ? (
           <div className="flex items-center justify-center py-8">
@@ -234,6 +309,66 @@ export function IndexInfo({ tenantSlug }: IndexInfoProps) {
         )}
       </CardContent>
     </Card>
+
+    {/* Delete Index Confirmation Dialog */}
+    <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete Elasticsearch Index</DialogTitle>
+          <DialogDescription>
+            This will permanently delete the index <code className="font-mono text-xs bg-muted px-1 py-0.5 rounded">{indexInfo?.indexName || `docs_${tenantSlug}`}</code> for tenant <strong>{tenantSlug}</strong>.
+            <br />
+            <br />
+            This action cannot be undone. All documents in this index will be lost.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="flex items-start space-x-3">
+            <Checkbox
+              id="clear-manifest"
+              checked={clearManifest}
+              onCheckedChange={(checked) => setClearManifest(checked === true)}
+            />
+            <div className="space-y-1">
+              <Label
+                htmlFor="clear-manifest"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+              >
+                Also clear the manifest
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {clearManifest
+                  ? "Manifest entries will be deleted. Documents can be reindexed when the producer runs next."
+                  : "Manifest entries will be marked as deleted. Documents will NOT be reindexed when the producer runs next."}
+              </p>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setDeleteDialogOpen(false);
+              setClearManifest(false);
+            }}
+            disabled={deleting}
+          >
+            Cancel
+          </Button>
+          <Button variant="destructive" onClick={handleDeleteIndex} disabled={deleting}>
+            {deleting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Deleting...
+              </>
+            ) : (
+              "Delete Index"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 

@@ -1,179 +1,239 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "../../../../../lib/auth-helpers";
-import { getIndexInfo, getStandardMapping } from "../../../../../lib/elasticsearch";
+import { elasticsearch, getTenantIndex } from "../../../../../lib/elasticsearch";
+import { prisma } from "../../../../../lib/prisma";
 
 type Context = {
   params: Promise<{ slug: string }>;
 };
 
-/**
- * Compare two mappings to check if they're compatible
- * Core fields must match, but descriptive metadata fields are flexible
- */
-function mappingsCompatible(standardMapping: Record<string, unknown>, actualMapping: Record<string, unknown>): boolean {
-  if (!standardMapping || !actualMapping) return false;
-  
-  const standardProps = (standardMapping.properties as Record<string, unknown>) || {};
-  const actualProps = (actualMapping.properties as Record<string, unknown>) || {};
-  
-  // Core required fields that must exist
-  const coreFields = ["id", "document_id", "tenant_id", "chunk_index", "chunk_offset", "title", "content", "metadata"];
-  
-  for (const field of coreFields) {
-    if (!actualProps[field]) {
-      return false;
-    }
-    
-    // Check type compatibility for core fields (only if both have a type)
-    // For complex fields like "title" with subfields, just check that the base type matches
-    const standardField = standardProps[field] as Record<string, unknown> | undefined;
-    const actualField = actualProps[field] as Record<string, unknown> | undefined;
-    if (standardField?.type && actualField?.type) {
-      if (actualField.type !== standardField.type) {
-        return false;
-      }
-    }
-  }
-  
-  // Check metadata object structure
-  const standardMetadataObj = standardProps.metadata as Record<string, unknown> | undefined;
-  const actualMetadataObj = actualProps.metadata as Record<string, unknown> | undefined;
-  const standardMetadata = (standardMetadataObj?.properties as Record<string, unknown>) || {};
-  const actualMetadata = (actualMetadataObj?.properties as Record<string, unknown>) || {};
-  
-  if (!actualMetadata || Object.keys(actualMetadata).length === 0) {
-    return false;
-  }
-  
-  // Core metadata fields that must always exist
-  const requiredCoreFields = ["filename", "mime", "source", "originalUrl"];
-  for (const field of requiredCoreFields) {
-    if (!actualMetadata[field]) {
-      return false;
-    }
-    const standardField = standardMetadata[field] as Record<string, unknown> | undefined;
-    const actualField = actualMetadata[field] as Record<string, unknown> | undefined;
-    if (standardField?.type && actualField?.type !== standardField.type) {
-      return false;
-    }
-  }
-  
-  // Check if this is the new structure (with source_url, type, and extras)
-  const hasSourceUrl = !!actualMetadata.source_url;
-  const hasType = !!actualMetadata.type;
-  const hasExtras = !!actualMetadata.extras;
-  const hasNewStructure = hasSourceUrl && hasType && hasExtras;
-  
-  if (hasNewStructure) {
-    // New structure: verify source_url, type, and extras have correct types
-    const sourceUrlField = actualMetadata.source_url as Record<string, unknown> | undefined;
-    const typeField = actualMetadata.type as Record<string, unknown> | undefined;
-    if (sourceUrlField?.type !== "keyword") {
-      return false;
-    }
-    if (typeField?.type !== "keyword") {
-      return false;
-    }
-    // Check if extras is an object (it should have type "object" or have properties/dynamic)
-    // Elasticsearch may represent object types differently, so we check for either:
-    // - type === "object" 
-    // - has "properties" (indicating it's an object type)
-    // - has "dynamic" (indicating it's an object type)
-    const extras = actualMetadata.extras as Record<string, unknown> | undefined;
-    if (!extras) {
-      return false;
-    }
-    
-    const extrasType = extras.type;
-    const hasExtrasProperties = !!(extras.properties as Record<string, unknown> | undefined);
-    const hasExtrasDynamic = extras.dynamic !== undefined;
-    
-    // If extras has an explicit type, it must be "object"
-    if (extrasType && extrasType !== "object") {
-      return false;
-    }
-    // If extras doesn't have a type, it must have properties or dynamic to be a valid object
-    if (!extrasType && !hasExtrasProperties && !hasExtrasDynamic) {
-      return false;
-    }
-    // If we get here, extras is valid (either has type "object" or has properties/dynamic)
-    // New structure is compatible
-    // Note: We don't check if old fields (book_id, s3_bucket, etc.) are at the wrong level
-    // because Elasticsearch doesn't allow moving fields. The important thing is that
-    // the new structure (source_url, type, extras) exists and is correct.
-    // Old fields at the top level of metadata.properties are acceptable for backward compatibility.
-    return true;
-  } else {
-    // Old structure: compatible if it has the required core fields (already checked above)
-    // This allows backward compatibility with indices created before the new structure
-    return true;
-  }
-}
-
 export async function GET(_request: Request, context: Context) {
   try {
-    const user = await requireAuth();
-    
-    // Check if user is platform admin
-    const isPlatformAdmin =
-      user.memberships?.some((m: { tenantId: string; tenantSlug: string; role: string }) => m.role === "platform_admin") ?? false;
-    
-    if (!isPlatformAdmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
+    await requireAuth();
     const { slug } = await context.params;
-    const indexInfo = await getIndexInfo(slug);
-    const standardMapping = getStandardMapping();
 
-    if (!indexInfo) {
-      return NextResponse.json({ 
-        indexName: `docs_${slug}`,
+    const indexName = getTenantIndex(slug);
+    const exists = await elasticsearch.indices.exists({ index: indexName });
+    if (!exists) {
+      return NextResponse.json({
+        indexName,
         exists: false,
-        shards: null,
-        documentCount: 0,
-        chunkCount: 0,
-        size: 0,
-        mapping: null,
-        mappingCompatible: false,
-        standardMapping,
       });
     }
 
-    // Check if mapping is compatible with standard mapping
-    const compatible = mappingsCompatible(
-      standardMapping as Record<string, unknown>, 
-      (indexInfo.mapping || {}) as Record<string, unknown>
-    );
-    
-    // Debug: Log the compatibility check result
-    if (!compatible) {
-      console.log(`[DEBUG] Mapping incompatible for ${indexInfo.indexName}`);
-      const actualProps = ((indexInfo.mapping as Record<string, unknown>)?.properties as Record<string, unknown>) || {};
-      const actualMetadataObj = actualProps.metadata as Record<string, unknown> | undefined;
-      const actualMetadata = (actualMetadataObj?.properties as Record<string, unknown>) || {};
-      const sourceUrlField = actualMetadata.source_url as Record<string, unknown> | undefined;
-      const typeField = actualMetadata.type as Record<string, unknown> | undefined;
-      const extrasField = actualMetadata.extras as Record<string, unknown> | undefined;
-      console.log(`[DEBUG] source_url exists: ${!!actualMetadata.source_url}, type: ${sourceUrlField?.type}`);
-      console.log(`[DEBUG] type exists: ${!!actualMetadata.type}, type: ${typeField?.type}`);
-      console.log(`[DEBUG] extras exists: ${!!actualMetadata.extras}`);
-      console.log(`[DEBUG] extras type: ${extrasField?.type}`);
-      console.log(`[DEBUG] extras has properties: ${!!extrasField?.properties}`);
-      console.log(`[DEBUG] extras has dynamic: ${extrasField?.dynamic !== undefined}`);
+    const settings = await elasticsearch.indices.getSettings({ index: indexName });
+    const stats = await elasticsearch.indices.stats({ index: indexName });
+    const mapping = await elasticsearch.indices.getMapping({ index: indexName });
+
+    const indexSettings = settings[indexName]?.settings?.index;
+    const indexStats = stats.indices?.[indexName];
+    const indexMapping = mapping[indexName]?.mappings;
+
+    // Get unique document count (not chunk count)
+    let uniqueDocumentCount = 0;
+    const totalChunkCount = indexStats?.total?.docs?.count || 0;
+
+    try {
+      const searchResult = await elasticsearch.search({
+        index: indexName,
+        size: 0,
+        aggs: {
+          unique_documents: {
+            cardinality: {
+              field: "document_id",
+            },
+          },
+        },
+      });
+      uniqueDocumentCount = (searchResult.aggregations?.unique_documents as { value: number })?.value || 0;
+    } catch (error) {
+      console.error(`Error getting unique document count for ${indexName}:`, error);
+      uniqueDocumentCount = totalChunkCount;
+    }
+
+    // Get standard mapping for compatibility check
+    const standardMapping = {
+      properties: {
+        id: { type: "keyword" },
+        document_id: { type: "keyword" },
+        tenant_id: { type: "keyword" },
+        chunk_index: { type: "integer" },
+        chunk_offset: { type: "integer" },
+        title: {
+          type: "text",
+          fields: {
+            keyword: { type: "keyword" },
+          },
+        },
+        content: {
+          type: "text",
+          analyzer: "standard",
+        },
+        metadata: {
+          type: "object",
+          dynamic: false,
+          properties: {
+            filename: { type: "keyword" },
+            mime: { type: "keyword" },
+            source: { type: "keyword" },
+            source_url: { type: "keyword" },
+            type: { type: "keyword" },
+            originalUrl: { type: "keyword" },
+            extras: {
+              type: "object",
+              dynamic: true,
+            },
+          },
+        },
+        created_at: { type: "date" },
+        updated_at: { type: "date" },
+      },
+    };
+
+    // Check mapping compatibility
+    const actualMapping = indexMapping?.properties as Record<string, unknown> | undefined;
+    const standardProps = standardMapping.properties as Record<string, unknown>;
+    const actualProps = actualMapping || {};
+
+    let mappingCompatible = true;
+    const requiredFields = ["id", "document_id", "tenant_id", "chunk_index", "title", "content", "metadata", "created_at", "updated_at"];
+
+    for (const field of requiredFields) {
+      if (!(field in actualProps)) {
+        mappingCompatible = false;
+        break;
+      }
+    }
+
+    // Check metadata structure
+    if (mappingCompatible) {
+      const standardMetadata = (standardProps.metadata as Record<string, unknown>)?.properties as Record<string, unknown>;
+      const actualMetadata = (actualProps.metadata as Record<string, unknown>)?.properties as Record<string, unknown> | undefined;
+
+      if (!actualMetadata) {
+        mappingCompatible = false;
+      } else {
+        const requiredMetadataFields = ["filename", "mime", "source", "source_url", "type", "originalUrl"];
+        for (const field of requiredMetadataFields) {
+          if (!(field in actualMetadata)) {
+            mappingCompatible = false;
+            break;
+          }
+        }
+
+        // Check extras exists and is dynamic
+        if (mappingCompatible) {
+          const extras = actualMetadata.extras as Record<string, unknown> | undefined;
+          if (!extras || (extras.type as string) !== "object" || (extras.dynamic as boolean) !== true) {
+            // Extras is optional but if present should be dynamic object
+            // We'll allow it to be missing for backward compatibility
+          }
+        }
+      }
     }
 
     return NextResponse.json({
-      ...indexInfo,
-      mappingCompatible: compatible,
+      indexName,
+      exists: true,
+      shards: {
+        primary: typeof indexSettings?.number_of_shards === "string"
+          ? parseInt(String(indexSettings.number_of_shards), 10)
+          : (indexSettings?.number_of_shards as number) || 1,
+        replicas: typeof indexSettings?.number_of_replicas === "string"
+          ? parseInt(String(indexSettings.number_of_replicas), 10)
+          : (indexSettings?.number_of_replicas as number) || 0,
+        total:
+          (typeof indexSettings?.number_of_shards === "string"
+            ? parseInt(String(indexSettings.number_of_shards), 10)
+            : (indexSettings?.number_of_shards as number) || 1) *
+          (1 +
+            (typeof indexSettings?.number_of_replicas === "string"
+              ? parseInt(String(indexSettings.number_of_replicas), 10)
+              : (indexSettings?.number_of_replicas as number) || 0)),
+      },
+      documentCount: uniqueDocumentCount,
+      chunkCount: totalChunkCount,
+      size: indexStats?.total?.store?.size_in_bytes || 0,
+      mapping: indexMapping,
+      mappingCompatible,
       standardMapping,
     });
   } catch (error) {
     console.error("Error fetching index info:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch index information" },
-      { status: 500 }
-    );
+    if (error instanceof Error && (error.message === "Unauthorized" || error.message.includes("Forbidden"))) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Failed to fetch index info" }, { status: 500 });
   }
 }
 
+export async function DELETE(request: Request, context: Context) {
+  try {
+    const user = await requireAuth();
+
+    // Check if user is platform admin - only admins can delete indices
+    const isPlatformAdmin =
+      user.memberships?.some((m: { tenantId: string; tenantSlug: string; role: string }) => m.role === "platform_admin") ?? false;
+
+    if (!isPlatformAdmin) {
+      return NextResponse.json({ error: "Forbidden: Only platform admins can delete indices" }, { status: 403 });
+    }
+
+    const { slug } = await context.params;
+
+    // Verify tenant exists
+    const tenant = await prisma.tenant.findUnique({
+      where: { slug },
+    });
+
+    if (!tenant) {
+      return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
+    }
+
+    // Get the expected index name for this tenant
+    const expectedIndexName = getTenantIndex(slug);
+
+    // Verify the index exists and matches the tenant
+    const indexExists = await elasticsearch.indices.exists({ index: expectedIndexName });
+    if (!indexExists) {
+      return NextResponse.json({ error: "Index does not exist" }, { status: 404 });
+    }
+
+    // Parse request body for options
+    const body = await request.json().catch(() => ({}));
+    const clearManifest = body.clearManifest === true;
+
+    // Delete the index
+    await elasticsearch.indices.delete({ index: expectedIndexName });
+
+    // Handle manifest based on option
+    if (clearManifest) {
+      // Delete all manifest entries for this tenant (allows reindexing)
+      await prisma.$executeRaw`
+        DELETE FROM file_manifest 
+        WHERE "tenantId" = ${slug}
+      `;
+      console.log(`[DELETE /api/tenants/${slug}/index] Deleted index ${expectedIndexName} and cleared manifest for tenant ${slug}`);
+    } else {
+      // Mark all manifest entries as deleted (prevents reindexing)
+      await prisma.$executeRaw`
+        UPDATE file_manifest 
+        SET "isDeleted" = true 
+        WHERE "tenantId" = ${slug} AND "isDeleted" = false
+      `;
+      console.log(`[DELETE /api/tenants/${slug}/index] Deleted index ${expectedIndexName} and marked manifest entries as deleted for tenant ${slug}`);
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Index ${expectedIndexName} deleted successfully`,
+      manifestCleared: clearManifest,
+    });
+  } catch (error) {
+    console.error("Error deleting index:", error);
+    if (error instanceof Error && (error.message === "Unauthorized" || error.message.includes("Forbidden"))) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Failed to delete index" }, { status: 500 });
+  }
+}
