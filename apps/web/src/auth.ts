@@ -6,11 +6,8 @@ import type { TenantRole } from "@distributed-docsearch/core/tenant";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true, // Always trust host - required for proper CSRF handling
-  // In development, use localhost (or NEXTAUTH_URL if set)
-  // In production, use AUTH_URL or NEXTAUTH_URL from environment
-  url: process.env.NODE_ENV === "development" 
-    ? (process.env.NEXTAUTH_URL || "http://localhost:3000")
-    : (process.env.AUTH_URL || process.env.NEXTAUTH_URL),
+  // NextAuth v5 automatically detects URL from environment variables (NEXTAUTH_URL or AUTH_URL)
+  // or from request headers when trustHost is true
   providers: [
     Credentials({
       credentials: {
