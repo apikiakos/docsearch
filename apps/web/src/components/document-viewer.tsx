@@ -89,8 +89,16 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
   
   // For Gutenberg books and other remote sources, prefer iframe with originalUrl
   // Ensure URL is HTTPS to prevent mixed content errors
-  // Also check sourceUrl as fallback in case originalUrl is not set
-  const remoteUrlCandidate = originalUrl || sourceUrl;
+  // Prefer sourceUrl if it's HTTPS and originalUrl is HTTP (to avoid old indexed URLs)
+  let remoteUrlCandidate: string | undefined;
+  if (sourceUrl && sourceUrl.startsWith("https://")) {
+    // Prefer HTTPS sourceUrl over potentially old HTTP originalUrl
+    remoteUrlCandidate = sourceUrl;
+  } else if (originalUrl) {
+    remoteUrlCandidate = originalUrl;
+  } else {
+    remoteUrlCandidate = sourceUrl;
+  }
   const useIframeForRemote = remoteUrlCandidate && (source === "gutendex" || remoteUrlCandidate.startsWith("http"));
   const remoteUrl = useIframeForRemote && remoteUrlCandidate ? ensureHttps(remoteUrlCandidate) || remoteUrlCandidate : null;
   
@@ -151,13 +159,17 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
   console.log("[DocumentViewer] Render:", {
     fileType,
     source,
+    sourceUrlRaw,
     sourceUrl,
+    originalUrlRaw,
+    originalUrl,
     localFilePath,
     tenantId,
     localFileUrl,
     useLocalFileUrl,
     useIframeForRemote,
-    originalUrl,
+    remoteUrlCandidate,
+    remoteUrl, // Log the final remote URL that will be used
     isS3Source,
     s3Key,
     s3PresignedUrl,
@@ -342,7 +354,7 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
                   ? localFileUrl! 
                   : (isS3Source && s3PresignedUrl)
                     ? s3PresignedUrl
-                    : remoteUrl || undefined
+                    : (remoteUrl ? ensureHttps(remoteUrl) || remoteUrl : undefined)
               }
               className="w-full border-0"
               style={{ minHeight: "600px", display: "block" }}
