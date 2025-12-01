@@ -11,6 +11,7 @@ import {
   Settings,
   Building2,
   Users,
+  FileText,
 } from "lucide-react";
 
 type NavItem = {
@@ -29,12 +30,14 @@ const sectionColors: Record<string, string> = {
   Main: "text-[#A78BFA]",
   Search: "text-[#34D399]",
   System: "text-[#60A5FA]",
+  Assignment: "text-[#F59E0B]",
 };
 
 const bulletColors: Record<string, string> = {
   Main: "bg-[#A78BFA]",
   Search: "bg-[#34D399]",
   System: "bg-[#60A5FA]",
+  Assignment: "bg-[#F59E0B]",
 };
 
 // Base navigation sections - will be filtered based on user role
@@ -69,6 +72,17 @@ const baseNavSections: NavSection[] = [
         label: "Users",
         href: "/dashboard/users",
         icon: Users,
+        disabled: false,
+      },
+    ],
+  },
+  {
+    label: "Assignment",
+    items: [
+      {
+        label: "Deliverables",
+        href: "/dashboard/assignment",
+        icon: FileText,
         disabled: false,
       },
     ],
