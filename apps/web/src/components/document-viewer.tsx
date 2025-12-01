@@ -219,11 +219,13 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
       // We already have the full book content, display it directly
       if (!containerRef.current) return;
       const container = containerRef.current;
+      const bookTitle = (extras?.title as string | undefined) || (metadata?.title as string | undefined) || filename || "Gutenberg Book";
+      const bookAuthor = extras?.author as string | undefined;
       container.innerHTML = `
         <div style="padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.8; max-width: 1200px; margin: 0 auto; background: #fff;">
           <div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 2px solid #e5e7eb;">
-            <h1 style="font-size: 2em; margin: 0 0 10px 0; color: #111827;">${metadata?.extras?.title || metadata?.title || filename || "Gutenberg Book"}</h1>
-            ${metadata?.extras?.author ? `<p style="font-size: 1.1em; color: #6b7280; margin: 0;">by ${metadata.extras.author}</p>` : ""}
+            <h1 style="font-size: 2em; margin: 0 0 10px 0; color: #111827;">${escapeHtml(bookTitle)}</h1>
+            ${bookAuthor ? `<p style="font-size: 1.1em; color: #6b7280; margin: 0;">by ${escapeHtml(bookAuthor)}</p>` : ""}
           </div>
           <div style="white-space: pre-wrap; word-wrap: break-word; font-size: 16px; color: #374151; line-height: 1.8;">${escapeHtml(content)}</div>
         </div>
@@ -362,7 +364,7 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
       `;
       setTimeout(() => setViewerReady(true), 0);
     }
-  }, [content, fileType, originalUrl, metadata, useIframeForRemote, useLocalFileUrl, localFileUrl, isS3Source, s3PresignedUrl, useDocxViewer, docxViewerUrl]);
+  }, [content, fileType, originalUrl, metadata, useIframeForRemote, useLocalFileUrl, localFileUrl, isS3Source, s3PresignedUrl, useDocxViewer, docxViewerUrl, source, filename, extras]);
 
   // Monitor iframe src to prevent old Gutenberg URLs from being set
   // Also handle Gutenberg redirects by fetching content directly if needed
