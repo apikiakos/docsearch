@@ -18,6 +18,24 @@ function escapeHtml(text: string): string {
   return div.innerHTML;
 }
 
+/**
+ * Convert HTTP URLs to HTTPS when the page is served over HTTPS
+ * This prevents mixed content errors in production
+ */
+function ensureHttps(url: string | undefined): string | undefined {
+  if (!url) return url;
+  
+  // Only convert if the current page is served over HTTPS
+  if (typeof window !== "undefined" && window.location.protocol === "https:") {
+    // Convert http:// to https://
+    if (url.startsWith("http://")) {
+      return url.replace(/^http:\/\//, "https://");
+    }
+  }
+  
+  return url;
+}
+
 export function DocumentViewer({ content, metadata, filename, mimeType }: DocumentViewerProps) {
   const [viewerReady, setViewerReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,9 +49,13 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
     filename || (metadata?.filename as string | undefined)
   );
   const fileTypeInfo = getFileTypeInfo(fileType);
-  const originalUrl = metadata?.originalUrl as string | undefined;
+  const originalUrlRaw = metadata?.originalUrl as string | undefined;
   const source = metadata?.source as string | undefined;
-  const sourceUrl = metadata?.source_url as string | undefined;
+  const sourceUrlRaw = metadata?.source_url as string | undefined;
+  
+  // Convert HTTP URLs to HTTPS to prevent mixed content errors in production
+  const originalUrl = ensureHttps(originalUrlRaw);
+  const sourceUrl = ensureHttps(sourceUrlRaw);
   const tenantId = metadata?.tenant_id as string | undefined;
   const extras = metadata?.extras as Record<string, unknown> | undefined;
   
@@ -70,6 +92,29 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
   
   // For local files, use the API route
   const useLocalFileUrl = localFileUrl !== null;
+  
+  // For DOCX files, if we have a URL, use Microsoft Office Online Viewer
+  // This allows previewing DOCX without downloading
+  // Prefer: presigned S3 URL > originalUrl > sourceUrl > localFileUrl (converted to absolute)
+  let docxUrl: string | null = null;
+  if (fileType === "DOCX") {
+    if (isS3Source && s3PresignedUrl) {
+      docxUrl = s3PresignedUrl;
+    } else if (originalUrl && originalUrl.startsWith("http")) {
+      docxUrl = originalUrl;
+    } else if (sourceUrl && sourceUrl.startsWith("http")) {
+      docxUrl = sourceUrl;
+    } else if (localFileUrl) {
+      // Convert relative URL to absolute URL for Office Online Viewer
+      if (typeof window !== "undefined") {
+        docxUrl = `${window.location.origin}${localFileUrl}`;
+      }
+    }
+  }
+  const useDocxViewer = fileType === "DOCX" && docxUrl !== null;
+  const docxViewerUrl = useDocxViewer && docxUrl
+    ? `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(ensureHttps(docxUrl) || docxUrl)}`
+    : null;
   
   // Fetch presigned URL for S3 files
   useEffect(() => {
@@ -121,9 +166,9 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
       return; // Wait for presigned URL to be fetched
     }
 
-    // For local files, remote sources, or S3 files with presigned URL, iframe src is set directly in JSX
+    // For local files, remote sources, S3 files with presigned URL, or DOCX with viewer URL, iframe src is set directly in JSX
     // Set viewerReady immediately so the iframe is visible
-    if (useLocalFileUrl || useIframeForRemote || (isS3Source && s3PresignedUrl)) {
+    if (useLocalFileUrl || useIframeForRemote || (isS3Source && s3PresignedUrl) || useDocxViewer) {
       // Small delay to ensure iframe is mounted
       setTimeout(() => setViewerReady(true), 100);
       return;
@@ -191,8 +236,9 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
     } else if (["JPG", "JPEG", "PNG", "GIF", "SVG", "WEBP"].includes(fileType)) {
       // Images: Display directly
       if (originalUrl) {
-        if (iframeRef.current) {
-          iframeRef.current.src = originalUrl;
+        const httpsUrl = ensureHttps(originalUrl);
+        if (iframeRef.current && httpsUrl) {
+          iframeRef.current.src = httpsUrl;
         }
       } else {
         // If content is base64, use it directly
@@ -210,9 +256,9 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
         }
       }
       setTimeout(() => setViewerReady(true), 0);
-    } else if (fileType === "DOCX") {
-      // DOCX: Use docx-preview library (we'll need to install it)
-      // For now, show formatted text with a note
+    } else if (fileType === "DOCX" && !useDocxViewer) {
+      // DOCX: If no URL available, show extracted text content
+      // If URL is available, it will be handled by the iframe with Office Online Viewer
       container.innerHTML = `
         <div style="padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto;">
           <div style="background: #f0f9ff; border-left: 4px solid #0ea5e9; padding: 12px; margin-bottom: 20px; border-radius: 4px;">
@@ -250,7 +296,7 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
       `;
       setTimeout(() => setViewerReady(true), 0);
     }
-  }, [content, fileType, originalUrl, metadata, useIframeForRemote, useLocalFileUrl, localFileUrl, isS3Source, s3PresignedUrl]);
+  }, [content, fileType, originalUrl, metadata, useIframeForRemote, useLocalFileUrl, localFileUrl, isS3Source, s3PresignedUrl, useDocxViewer, docxViewerUrl]);
 
   if (["JPG", "JPEG", "PNG", "GIF", "SVG", "WEBP"].includes(fileType) && !originalUrl) {
     // Images displayed directly in container
@@ -282,15 +328,17 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
               </div>
             </div>
           )}
-          {(fileType === "PDF" || fileType === "HTML" || fileType === "HTM" || useIframeForRemote || useLocalFileUrl || (isS3Source && s3PresignedUrl)) && (
+          {(fileType === "PDF" || fileType === "HTML" || fileType === "HTM" || useIframeForRemote || useLocalFileUrl || (isS3Source && s3PresignedUrl) || useDocxViewer) && (
             <iframe
               ref={iframeRef}
               src={
-                useLocalFileUrl 
+                useDocxViewer && docxViewerUrl
+                  ? docxViewerUrl
+                  : useLocalFileUrl 
                   ? localFileUrl! 
                   : (isS3Source && s3PresignedUrl)
                     ? s3PresignedUrl
-                    : (useIframeForRemote && originalUrl ? originalUrl : undefined)
+                    : (useIframeForRemote && originalUrl ? ensureHttps(originalUrl) || originalUrl : undefined)
               }
               className="w-full border-0"
               style={{ minHeight: "600px", display: "block" }}
@@ -308,7 +356,7 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
               }}
             />
           )}
-          {!(fileType === "PDF" || fileType === "HTML" || fileType === "HTM" || useIframeForRemote || useLocalFileUrl || (isS3Source && s3PresignedUrl)) && (
+          {!(fileType === "PDF" || fileType === "HTML" || fileType === "HTM" || useIframeForRemote || useLocalFileUrl || (isS3Source && s3PresignedUrl) || useDocxViewer) && (
             <div ref={containerRef} className="w-full" />
           )}
         </div>
