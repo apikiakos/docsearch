@@ -5,6 +5,8 @@ import bcrypt from "bcryptjs";
 import type { TenantRole } from "@distributed-docsearch/core/tenant";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  trustHost: process.env.NODE_ENV === "development", // Trust host in development to avoid CSRF issues
+  url: process.env.AUTH_URL || process.env.NEXTAUTH_URL, // Use AUTH_URL if set, fallback to NEXTAUTH_URL
   providers: [
     Credentials({
       credentials: {
