@@ -38,7 +38,7 @@ export default function Sidebar() {
           <h2 className="text-lg font-semibold">DocSearch</h2>
         </div>
         <nav className="flex-1 space-y-1 p-4">
-          {navigation.map((item) => {
+          {navigation.map((item: { name: string; href: string; icon: React.ComponentType<React.SVGProps<SVGSVGElement>> }) => {
             const Icon = item.icon;
             const isActive = pathname === item.href;
             return (

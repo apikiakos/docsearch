@@ -177,7 +177,7 @@ export function UsersTable() {
                 </TableCell>
               </TableRow>
             ) : (
-              users.map((user) => (
+              users.map((user: User) => (
                 <TableRow
                   key={user.id}
                   className="cursor-pointer hover:bg-muted/50"
@@ -187,7 +187,7 @@ export function UsersTable() {
                   <TableCell>{user.name || "-"}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
-                      {user.memberships.map((m, idx) => (
+                      {user.memberships.map((m: { tenantSlug: string; tenantName: string; role: string }, idx: number) => (
                         <span
                           key={idx}
                           className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs font-medium"

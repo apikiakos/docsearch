@@ -69,7 +69,7 @@ export async function GET(_request: Request, context: Context) {
 
     // Get metadata from first chunk
     const firstChunk = chunks[0];
-    const fullContent = chunks.map((c) => c.content).join("\n\n");
+    const fullContent = chunks.map((c: { content: string }) => c.content).join("\n\n");
 
     // Return document with all chunks and full content
     return NextResponse.json({
@@ -77,7 +77,7 @@ export async function GET(_request: Request, context: Context) {
         ...firstChunk,
         content: fullContent,
         chunk_count: chunks.length,
-        chunks: chunks.map((c) => ({
+        chunks: chunks.map((c: { chunk_index: number; content: string }) => ({
           chunk_index: c.chunk_index,
           content: c.content,
         })),

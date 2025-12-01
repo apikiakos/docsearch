@@ -102,7 +102,7 @@ export default async function TenantDetailPage(context: Context) {
                   <p className="text-sm text-muted-foreground">No members</p>
                 ) : (
                   <div className="space-y-2">
-                    {tenant.memberships.map((membership) => (
+                    {tenant.memberships.map((membership: { id: string; role: string; user: { email: string; name: string | null } }) => (
                       <div
                         key={membership.id}
                         className="flex items-center justify-between p-3 border rounded-lg"

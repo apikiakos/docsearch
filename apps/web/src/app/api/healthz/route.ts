@@ -101,7 +101,7 @@ export async function GET() {
     metrics.rabbitmq_messages = 0;
   }
 
-  const allOk = Object.values(dependencies).every((status) => status === "ok");
+  const allOk = Object.values(dependencies).every((status: string | number) => status === "ok");
 
   return NextResponse.json(
     {

@@ -45,7 +45,7 @@ export function Autocomplete({
 }: AutocompleteProps) {
   const [open, setOpen] = React.useState(false);
 
-  const selectedOption = options.find((option) => option.value === value);
+  const selectedOption = options.find((option: AutocompleteOption) => option.value === value);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -67,7 +67,7 @@ export function Autocomplete({
           <CommandList>
             <CommandEmpty>{emptyText}</CommandEmpty>
             <CommandGroup>
-              {options.map((option) => (
+              {options.map((option: AutocompleteOption) => (
                 <CommandItem
                   key={option.value}
                   value={option.value}

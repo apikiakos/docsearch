@@ -86,7 +86,7 @@ function SystemStatusContent() {
           const orderB = SERVICE_ORDER[b.name] || 999;
           return orderA - orderB;
         })
-        .map((service) => {
+        .map((service: ServiceStatus) => {
         const Icon = SERVICE_ICONS[service.name] || Database;
         const variant = STATUS_VARIANTS[service.status] || "secondary";
         const statusText = `${service.name} ${service.status}`;
@@ -206,7 +206,7 @@ function ServiceDetailCard({ service }: { service: ServiceStatus }) {
 function SystemStatusSkeleton() {
   return (
     <div className="flex items-center gap-2">
-      {[1, 2, 3, 4].map((i) => (
+      {[1, 2, 3, 4].map((i: number) => (
         <Badge key={i} variant="secondary" className="h-6 w-12 animate-pulse">
           <div className="h-3 w-3 rounded bg-muted" />
         </Badge>

@@ -266,7 +266,7 @@ export function TenantDocuments({ tenantSlug }: TenantDocumentsProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {results.map((result) => {
+                    {results.map((result: SearchResult) => {
                       const fileTypeInfo = getFileTypeInfo(result.fileType);
                       const FileIcon = fileTypeInfo.icon;
                       return (
@@ -316,7 +316,7 @@ export function TenantDocuments({ tenantSlug }: TenantDocumentsProps) {
                           </TableCell>
                           <TableCell className="w-[250px] max-w-[250px] min-w-[250px] whitespace-normal!">
                             <div className="space-y-1 w-full max-w-full overflow-hidden">
-                              {result.highlights.slice(0, 2).map((highlight, idx) => (
+                              {result.highlights.slice(0, 2).map((highlight: string, idx: number) => (
                                 <div
                                   key={idx}
                                   className="text-xs w-full max-w-full"

@@ -183,7 +183,7 @@ export default function DocumentUploadPage() {
                     <SelectValue placeholder="Select a tenant" />
                   </SelectTrigger>
                   <SelectContent>
-                    {userTenants.map((t) => (
+                    {userTenants.map((t: { slug: string; name: string }) => (
                       <SelectItem key={t.slug} value={t.slug}>
                         {t.name}
                       </SelectItem>

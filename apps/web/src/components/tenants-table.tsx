@@ -175,7 +175,7 @@ export function TenantsTable() {
                 </TableCell>
               </TableRow>
             ) : (
-              tenants.map((tenant) => (
+              tenants.map((tenant: Tenant) => (
                 <TableRow
                   key={tenant.id}
                   className="cursor-pointer hover:bg-muted/50"

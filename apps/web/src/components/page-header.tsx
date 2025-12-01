@@ -29,7 +29,7 @@ export function PageHeader({
     <div className={cn("space-y-4 pb-6", className)}>
       {breadcrumbs && breadcrumbs.length > 0 && (
         <nav className="flex items-center gap-1 text-xs text-muted-foreground">
-          {breadcrumbs.map((item, idx) => {
+          {breadcrumbs.map((item: BreadcrumbItem, idx: number) => {
             const isLast = idx === breadcrumbs.length - 1;
             const content =
               isLast || !item.href ? (

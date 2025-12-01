@@ -159,7 +159,7 @@ export function SystemStatus() {
               const orderB = SERVICE_ORDER[b.name] || 999;
               return orderA - orderB;
             })
-            .map((service) => {
+            .map((service: ServiceStatus) => {
             const Icon = SERVICE_ICONS[service.name] || Database;
             const description = SERVICE_DESCRIPTIONS[service.name] || "";
             return (

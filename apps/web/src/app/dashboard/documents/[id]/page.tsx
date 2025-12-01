@@ -283,7 +283,7 @@ export default function DocumentDetailPage() {
                 <div className="space-y-2">
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Additional Metadata</h4>
                   <div className="grid grid-cols-2 gap-3 text-sm">
-                    {Object.entries(document.metadata.extras as Record<string, unknown>).map(([key, value]) => {
+                    {Object.entries(document.metadata.extras as Record<string, unknown>).map(([key, value]: [string, unknown]) => {
                       if (value === null || value === undefined) return null;
                       if (key === "html_meta" && typeof value === "object") {
                         return (
@@ -320,7 +320,7 @@ export default function DocumentDetailPage() {
                     <div className="space-y-2">
                       <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Legacy Fields</h4>
                       <div className="grid grid-cols-2 gap-3 text-sm">
-                        {legacyFields.map((field) => {
+                        {legacyFields.map((field: string) => {
                           const value = document.metadata?.[field];
                           if (value === null || value === undefined) return null;
                           return (

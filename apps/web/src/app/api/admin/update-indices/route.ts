@@ -34,7 +34,7 @@ export async function POST(request: Request) {
       format: "json",
     });
 
-    const indices = (indicesResponse as Array<{ index: string }>).map((idx) => idx.index);
+    const indices = (indicesResponse as Array<{ index: string }>).map((idx: { index: string }) => idx.index);
     
     if (indices.length === 0) {
       return NextResponse.json({

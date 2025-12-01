@@ -102,7 +102,7 @@ export function AdminSidebar({ user }: AdminSidebarProps) {
 
       <ScrollArea className="flex-1 px-2 py-4 min-h-0">
         <nav className="space-y-5">
-          {navSections.map((section) => (
+          {navSections.map((section: NavSection) => (
             <div key={section.label} className="space-y-1">
               <div
                 className={cn(
@@ -112,7 +112,7 @@ export function AdminSidebar({ user }: AdminSidebarProps) {
               >
                 {section.label}
               </div>
-              {section.items.map((item) => {
+              {section.items.map((item: NavItem) => {
                 const Icon = item.icon;
                 const isActive =
                   !item.disabled &&

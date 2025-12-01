@@ -290,7 +290,7 @@ export default function SearchPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Tenants</SelectItem>
-                    {userTenants.map((t) => (
+                    {userTenants.map((t: { slug: string; name: string }) => (
                       <SelectItem key={t.slug} value={t.slug}>
                         {t.name}
                       </SelectItem>
@@ -380,7 +380,7 @@ export default function SearchPage() {
                         </TableRow>
                       </TableHeader>
                     <TableBody>
-                      {results.map((result) => {
+                      {results.map((result: SearchResult) => {
                         const fileTypeInfo = getFileTypeInfo(result.fileType);
                         const FileIcon = fileTypeInfo.icon;
                         return (
@@ -424,7 +424,7 @@ export default function SearchPage() {
                           </TableCell>
                         <TableCell className="w-[250px]">
                           <div className="space-y-1">
-                            {result.highlights.slice(0, 2).map((highlight, idx) => (
+                            {result.highlights.slice(0, 2).map((highlight: string, idx: number) => (
                               <div
                                 key={idx}
                                 className="text-xs break-words overflow-wrap-anywhere"
