@@ -352,9 +352,10 @@ def fetch_new_documents(db: ManifestDB, channel, max_books: int):
     enqueued = 0
     skipped = 0
     
-    # Safety limit: don't process more than 10x the requested number to avoid infinite loops
-    # If we've processed 50 books and only found 1 new one, something is wrong
-    max_processed = max(max_books * 10, 50)
+    # Safety limit: don't process more than 20x the requested number to avoid infinite loops
+    # If many books are already indexed, we need to check more to find new ones
+    # Minimum 100 to allow finding new books even if many are already indexed
+    max_processed = max(max_books * 20, 100)
     
     # Continue until we've enqueued max_books NEW documents (not just processed that many)
     while page_url and processed < max_processed:
@@ -386,7 +387,27 @@ def fetch_new_documents(db: ManifestDB, channel, max_books: int):
                 processed += 1
                 continue
             
-            # Download book (force download from online feed, not cached)
+            # Determine expected local path BEFORE downloading
+            # This allows us to check manifest first
+            # Use the same filename generation logic as download_book_text
+            safe_title = "".join(
+                c for c in title.replace(" ", "_") if c.isalnum() or c in ("_", "-")
+            )[:80]
+            filename = f"{book_id}_{safe_title}.txt"
+            expected_path = DATA_DIR / filename
+            path_str = str(expected_path)
+            
+            # Check if document already exists in manifest BEFORE downloading
+            # This prevents re-processing existing documents when --fetch-new is used
+            manifest = db.get_manifest(TENANT_ID, path_str)
+            if manifest:
+                # Document already in manifest - skip it (we only want NEW documents)
+                print(f"[gutenberg-producer] Book {book_id} already in manifest: {path_str} - skipping (fetch_new_only=True)")
+                skipped += 1
+                processed += 1
+                continue
+            
+            # This is a new document (not in manifest), so download and enqueue it
             local_path = download_book_text(book_id, title, text_url, db, force_download=True)
             
             if local_path is None:
@@ -394,18 +415,9 @@ def fetch_new_documents(db: ManifestDB, channel, max_books: int):
                 processed += 1
                 continue
             
-            # Check if we need to enqueue (new or changed file)
-            path_str = str(local_path)
-            manifest = db.get_manifest(TENANT_ID, path_str)
-            
-            # When fetching new documents only, skip if document already exists in manifest
-            # This prevents re-processing existing documents when --fetch-new is used
-            if manifest:
-                # Document already in manifest - skip it (we only want NEW documents)
-                print(f"[gutenberg-producer] Book {book_id} already in manifest: {path_str} - skipping (fetch_new_only=True)")
-                skipped += 1
-                processed += 1
-                continue
+            # Verify the path matches (should always match, but double-check)
+            if str(local_path) != path_str:
+                print(f"[gutenberg-producer] Warning: Expected path {path_str} but got {local_path}")
             
             # This is a new document (not in manifest), so enqueue it
             publish_file(channel, TENANT_ID, local_path, book_id, title, book)
@@ -427,6 +439,8 @@ def fetch_new_documents(db: ManifestDB, channel, max_books: int):
     
     if enqueued < max_books and processed >= max_processed:
         print(f"[gutenberg-producer] WARNING: Only found {enqueued} new books after processing {processed} books (limit: {max_books})")
+        print(f"[gutenberg-producer] This likely means most popular books are already indexed.")
+        print(f"[gutenberg-producer] Try increasing the limit or the producer will search through more pages next time.")
     
     print(f"[gutenberg-producer] Done. Processed {processed} books, enqueued {enqueued}, skipped {skipped}")
     return processed, enqueued, skipped
