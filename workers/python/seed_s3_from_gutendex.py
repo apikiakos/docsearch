@@ -424,14 +424,14 @@ def main():
     parser.add_argument(
         "--target-docs-tenant-1",
         type=int,
-        default=2000,
-        help="Target number of documents for tenant 1 (default: 2000)"
+        default=200,
+        help="Target number of documents for tenant 1 (default: 200)"
     )
     parser.add_argument(
         "--target-docs-tenant-2",
         type=int,
-        default=3000,
-        help="Target number of documents for tenant 2 (default: 3000)"
+        default=300,
+        help="Target number of documents for tenant 2 (default: 300)"
     )
     parser.add_argument(
         "--bucket",

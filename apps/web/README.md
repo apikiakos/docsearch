@@ -32,7 +32,6 @@ Create a `.env` file in the **project root** (not in `apps/web/`):
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/docsearch?schema=public"
 
 # NextAuth
-AUTH_SECRET="your-secret-key-here-change-in-production"
 NEXTAUTH_URL="http://localhost:3000"
 
 # Elasticsearch
@@ -42,10 +41,10 @@ ELASTICSEARCH_URL="http://localhost:9200"
 REDIS_URL="redis://localhost:6379"
 
 # AWS S3 Configuration (for seed_s3_from_gutendex.py and CloudFormation)
-AWS_ACCESS_KEY_ID="your-aws-access-key"
-AWS_SECRET_ACCESS_KEY="your-aws-secret-key"
-AWS_DEFAULT_REGION="us-east-1"
-AWS_S3_BUCKET="your-bucket-name"
+AWS_ACCESS_KEY_ID=""
+AWS_SECRET_ACCESS_KEY="your-secret-access-key"
+AWS_DEFAULT_REGION="eu-west-1"
+AWS_S3_BUCKET="document-search-tenants"
 ```
 
 **Note**: Next.js automatically loads `.env` files from the project root. Prisma config files are updated to load from the root `.env` as well.

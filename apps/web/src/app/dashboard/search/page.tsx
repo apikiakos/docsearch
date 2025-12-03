@@ -32,6 +32,9 @@ import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { SearchMetrics } from "@/components/search-metrics";
 import { getFileTypeInfo } from "@/lib/file-types";
+import { SortableTableHeader } from "@/components/sortable-table-header";
+import { TablePagination } from "@/components/table-pagination";
+import { usePersistedPageSize } from "@/hooks/use-persisted-page-size";
 
 type SearchResult = {
   id?: string; // Optional since we're grouping by document_id
@@ -60,6 +63,10 @@ export default function SearchPage() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = usePersistedPageSize();
+  const [sortBy, setSortBy] = useState<string>("");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [userTenants, setUserTenants] = useState<Array<{ slug: string; name: string }>>([]);
   const [bypassCache, setBypassCache] = useState(initialBypassCache);
   const [hasSearched, setHasSearched] = useState(false); // Track if user has performed an explicit search
@@ -195,6 +202,9 @@ export default function SearchPage() {
         // Empty tenant param means "All tenants" - search all accessible tenants
         // Only filter if a specific tenant is selected
         ...(searchTenant && searchTenant !== "all" && { tenant: searchTenant }),
+        page: page.toString(),
+        pageSize: pageSize.toString(),
+        ...(sortBy && { sortBy, sortOrder }),
         ...(bypassCache && { bypassCache: 'true' }),
       });
 
@@ -258,8 +268,43 @@ export default function SearchPage() {
     // User must click "Search" button to perform search
   };
 
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(column);
+      setSortOrder("desc");
+    }
+    setPage(1); // Reset to first page when sorting changes
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
+    // Trigger search with new page
+    if (query) {
+      performSearch(query, tenant === "all" ? "" : tenant, bypassCache);
+    }
+  };
+
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize);
+    setPage(1); // Reset to first page when page size changes
+    // Trigger search with new page size
+    if (query) {
+      performSearch(query, tenant === "all" ? "" : tenant, bypassCache);
+    }
+  };
+
+  // Re-trigger search when sort changes
+  useEffect(() => {
+    if (hasSearched && query) {
+      performSearch(query, tenant === "all" ? "" : tenant, bypassCache);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortBy, sortOrder]);
+
   const getDocumentUrl = (result: SearchResult): string => {
-    return `/dashboard/documents/${result.document_id}`;
+    return `/documents/${result.document_id}`;
   };
 
   return (
@@ -362,21 +407,60 @@ export default function SearchPage() {
           <div className="space-y-4">
             {/* Results Summary */}
             <p className="text-sm text-muted-foreground">
-              Found {total} document{total !== 1 ? "s" : ""} (sorted by relevance)
+              Found {total} document{total !== 1 ? "s" : ""}
             </p>
 
             {/* Results Table */}
             <Card>
               <CardContent className="p-0">
+                {/* Pagination controls at top right */}
+                <TablePagination
+                  page={page}
+                  pageSize={pageSize}
+                  total={total}
+                  totalPages={Math.ceil(total / pageSize)}
+                  onPageChange={handlePageChange}
+                  onPageSizeChange={handlePageSizeChange}
+                  loading={loading}
+                  position="top"
+                />
                 <div className="overflow-x-auto">
                     <Table className="table-fixed w-full">
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-[100px]">File Type</TableHead>
-                          <TableHead className="w-[200px]">Document Name</TableHead>
-                          <TableHead className="w-[120px]">Tenant</TableHead>
+                          <TableHead className="w-[200px]">
+                            <SortableTableHeader
+                              column="title"
+                              currentSortBy={sortBy}
+                              currentSortOrder={sortOrder}
+                              onSort={handleSort}
+                            >
+                              Document Name
+                            </SortableTableHeader>
+                          </TableHead>
+                          <TableHead className="w-[120px]">
+                            <SortableTableHeader
+                              column="tenant_id"
+                              currentSortBy={sortBy}
+                              currentSortOrder={sortOrder}
+                              onSort={handleSort}
+                            >
+                              Tenant
+                            </SortableTableHeader>
+                          </TableHead>
                           <TableHead className="w-[250px]">Highlights</TableHead>
-                          <TableHead className="w-[80px] text-right">Score</TableHead>
+                          <TableHead className="w-[80px] text-right">
+                            <SortableTableHeader
+                              column="_score"
+                              currentSortBy={sortBy}
+                              currentSortOrder={sortOrder}
+                              onSort={handleSort}
+                              className="justify-end"
+                            >
+                              Score
+                            </SortableTableHeader>
+                          </TableHead>
                         </TableRow>
                       </TableHeader>
                     <TableBody>

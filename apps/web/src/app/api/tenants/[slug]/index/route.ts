@@ -199,35 +199,20 @@ export async function DELETE(request: Request, context: Context) {
       return NextResponse.json({ error: "Index does not exist" }, { status: 404 });
     }
 
-    // Parse request body for options
-    const body = await request.json().catch(() => ({}));
-    const clearManifest = body.clearManifest === true;
-
     // Delete the index
     await elasticsearch.indices.delete({ index: expectedIndexName });
 
-    // Handle manifest based on option
-    if (clearManifest) {
-      // Delete all manifest entries for this tenant (allows reindexing)
-      await prisma.$executeRaw`
-        DELETE FROM file_manifest 
-        WHERE "tenantId" = ${slug}
-      `;
-      console.log(`[DELETE /api/tenants/${slug}/index] Deleted index ${expectedIndexName} and cleared manifest for tenant ${slug}`);
-    } else {
-      // Mark all manifest entries as deleted (prevents reindexing)
-      await prisma.$executeRaw`
-        UPDATE file_manifest 
-        SET "isDeleted" = true 
-        WHERE "tenantId" = ${slug} AND "isDeleted" = false
-      `;
-      console.log(`[DELETE /api/tenants/${slug}/index] Deleted index ${expectedIndexName} and marked manifest entries as deleted for tenant ${slug}`);
-    }
+    // Always delete all manifest entries for this tenant (erase completely)
+    // This ensures zero documents, chunks, and manifest entries after dump
+    await prisma.$executeRaw`
+      DELETE FROM file_manifest 
+      WHERE "tenantId" = ${slug}
+    `;
+    console.log(`[DELETE /api/tenants/${slug}/index] Deleted index ${expectedIndexName} and erased all manifest entries for tenant ${slug}`);
 
     return NextResponse.json({
       success: true,
-      message: `Index ${expectedIndexName} deleted successfully`,
-      manifestCleared: clearManifest,
+      message: `Index ${expectedIndexName} deleted successfully. All manifest entries have been erased.`,
     });
   } catch (error) {
     console.error("Error deleting index:", error);

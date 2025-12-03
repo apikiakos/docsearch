@@ -28,6 +28,7 @@ export function normalizeFileType(mimeType?: string, filename?: string): string 
       const ext = parts[parts.length - 1].toLowerCase();
       const extMap: Record<string, string> = {
         // Documents
+        pdf: "PDF",
         doc: "DOC",
         docx: "DOCX",
         rtf: "RTF",

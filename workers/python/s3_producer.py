@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import time
+import argparse
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional, List
@@ -95,7 +96,8 @@ def discover_and_store_s3_document(
     tenant_id: str,
     db: ManifestDB,
     channel,
-    s3_client
+    s3_client,
+    fetch_new_only: bool = False
 ) -> bool:
     """
     Discover a single S3 document, download and store it locally if changed,
@@ -134,6 +136,11 @@ def discover_and_store_s3_document(
     # Get existing manifest entry (using S3 key as the path identifier)
     manifest_entry = db.get_manifest(tenant_id, s3_key)
     stored_etag = manifest_entry.get("etag") if manifest_entry else None
+    
+    # If fetch_new_only is True, skip documents that already exist in manifest
+    if fetch_new_only and manifest_entry:
+        print(f"[s3_producer] Document already indexed: {s3_key} - skipping (fetch-new mode)")
+        return False
     
     # Check if we need to download (new or changed)
     should_download = False
@@ -269,25 +276,222 @@ def discover_and_store_s3_document(
     return False
 
 
-def scan_s3_tenant(tenant_id: str, db: ManifestDB, channel, s3_client, max_docs: Optional[int] = None):
-    """
-    Scan S3 bucket for a specific tenant, download changed documents locally, and enqueue local paths.
+def check_existing_documents(tenant_id: str, db: ManifestDB, channel, s3_client):
+    """Check existing manifest entries for changes"""
+    print(f"[s3_producer] Checking existing documents in manifest for tenant '{tenant_id}'...")
     
-    Args:
-        tenant_id: Tenant identifier
-        db: ManifestDB instance
-        channel: RabbitMQ channel
-        s3_client: Boto3 S3 client
-        max_docs: Maximum number of documents to process (None = no limit)
-    """
+    # Get all manifest entries for this tenant
+    manifest_entries = db.get_all_manifest_entries(tenant_id)
+    
+    if not manifest_entries:
+        print(f"[s3_producer] No manifest entries found for tenant '{tenant_id}'")
+        return 0, 0
+    
+    enqueued = 0
+    checked = 0
+    
+    for entry in manifest_entries:
+        checked += 1
+        # Skip permanently deleted documents
+        if entry.get("permanentlyDeleted", False):
+            print(f"[s3_producer] Skipping permanently deleted document: {entry.get('path', 'N/A')}")
+            continue
+        
+        s3_key = entry.get("path")  # For S3, path is the S3 key
+        if not s3_key:
+            continue
+        
+        # Check if object still exists in S3
+        try:
+            s3_obj = s3_client.head_object(Bucket=BUCKET_NAME, Key=s3_key)
+            s3_etag = s3_obj.get('ETag', '').strip('"')
+            s3_last_modified = s3_obj.get('LastModified')
+            s3_size = s3_obj.get('ContentLength', 0)
+        except ClientError as e:
+            if e.response['Error']['Code'] == '404':
+                print(f"[s3_producer] Object no longer exists in S3: {s3_key}, skipping")
+                continue
+            else:
+                print(f"[s3_producer] Error checking S3 object {s3_key}: {e}, skipping")
+                continue
+        
+        # Get local file path
+        tenant_data_dir = DATA_DIR / tenant_id
+        key_parts = s3_key.split('/')
+        if len(key_parts) > 1:
+            local_filename = '_'.join(key_parts[1:])
+        else:
+            local_filename = key_parts[-1]
+        local_path = tenant_data_dir / local_filename
+        
+        if not local_path.exists():
+            # File missing from local cache, re-download
+            print(f"[s3_producer] File missing from cache: {s3_key}, re-downloading...")
+            s3_obj_dict = {
+                'Key': s3_key,
+                'ETag': s3_etag,
+                'LastModified': s3_last_modified,
+                'Size': s3_size,
+            }
+            if discover_and_store_s3_document(s3_obj_dict, tenant_id, db, channel, s3_client):
+                enqueued += 1
+            continue
+        
+        # Check if file changed
+        stored_etag = entry.get("etag")
+        if stored_etag != s3_etag:
+            # ETag changed, re-download and re-enqueue
+            print(f"[s3_producer] Document changed (ETag): {s3_key}, re-downloading...")
+            s3_obj_dict = {
+                'Key': s3_key,
+                'ETag': s3_etag,
+                'LastModified': s3_last_modified,
+                'Size': s3_size,
+            }
+            if discover_and_store_s3_document(s3_obj_dict, tenant_id, db, channel, s3_client):
+                enqueued += 1
+            continue
+        
+        # Check if document was never indexed (lastIndexedAt is None)
+        # This handles cases where the file was enqueued but consumer failed to index it
+        last_indexed = entry.get("lastIndexedAt")
+        if last_indexed is None:
+            # Document was never successfully indexed, re-enqueue even if file hasn't changed
+            print(f"[s3_producer] Document never indexed (lastIndexedAt is None): {s3_key}, re-enqueuing...")
+            s3_obj_dict = {
+                'Key': s3_key,
+                'ETag': s3_etag,
+                'LastModified': s3_last_modified,
+                'Size': s3_size,
+            }
+            if discover_and_store_s3_document(s3_obj_dict, tenant_id, db, channel, s3_client):
+                enqueued += 1
+            continue
+        
+        # Check local file fingerprint
+        current_mtime, current_size, current_hash = compute_file_fingerprint(local_path)
+        manifest_mtime_value = entry.get("lastMtime")
+        
+        if hasattr(manifest_mtime_value, "timestamp"):
+            manifest_mtime = manifest_mtime_value.timestamp()
+        elif isinstance(manifest_mtime_value, datetime):
+            manifest_mtime = manifest_mtime_value.timestamp()
+        else:
+            manifest_mtime = float(manifest_mtime_value) if manifest_mtime_value else 0
+        
+        manifest_size = int(entry.get("sizeBytes") or 0)
+        manifest_hash = entry.get("contentHash")
+        
+        if has_file_changed(
+            current_mtime, current_size, current_hash,
+            manifest_mtime, manifest_size, manifest_hash
+        ):
+            # File changed, re-download and re-enqueue
+            print(f"[s3_producer] Local file changed: {s3_key}, re-downloading...")
+            s3_obj_dict = {
+                'Key': s3_key,
+                'ETag': s3_etag,
+                'LastModified': s3_last_modified,
+                'Size': s3_size,
+            }
+            if discover_and_store_s3_document(s3_obj_dict, tenant_id, db, channel, s3_client):
+                enqueued += 1
+    
+    print(f"[s3_producer] Checked {checked} files, re-enqueued {enqueued} changed files")
+    return checked, enqueued
+
+
+def force_reindex_all_documents(tenant_id: str, db: ManifestDB, channel, s3_client):
+    """Force reindex all existing documents in manifest"""
+    manifest_entries = db.get_all_manifest_entries(tenant_id)
+    reindexed = 0
+    
+    print(f"[s3_producer] Force reindexing {len(manifest_entries)} documents in manifest for tenant '{tenant_id}'")
+    
+    for entry in manifest_entries:
+        # Skip permanently deleted documents
+        if entry.get("permanentlyDeleted", False):
+            print(f"[s3_producer] Skipping permanently deleted document: {entry.get('path', 'N/A')}")
+            continue
+        
+        s3_key = entry.get("path")
+        if not s3_key:
+            continue
+        
+        # Check if object still exists in S3
+        try:
+            s3_obj = s3_client.head_object(Bucket=BUCKET_NAME, Key=s3_key)
+            s3_etag = s3_obj.get('ETag', '').strip('"')
+            s3_last_modified = s3_obj.get('LastModified')
+            s3_size = s3_obj.get('ContentLength', 0)
+        except ClientError as e:
+            if e.response['Error']['Code'] == '404':
+                print(f"[s3_producer] Object no longer exists in S3: {s3_key}, skipping")
+                continue
+            else:
+                print(f"[s3_producer] Error checking S3 object {s3_key}: {e}, skipping")
+                continue
+        
+        # Force re-download and re-enqueue
+        s3_obj_dict = {
+            'Key': s3_key,
+            'ETag': s3_etag,
+            'LastModified': s3_last_modified,
+            'Size': s3_size,
+        }
+        if discover_and_store_s3_document(s3_obj_dict, tenant_id, db, channel, s3_client):
+            reindexed += 1
+            print(f"[s3_producer] Force re-enqueued: {s3_key}")
+    
+    print(f"[s3_producer] Force reindexed {reindexed} documents")
+    return len(manifest_entries), reindexed
+
+
+def reindex_single_document(tenant_id: str, db: ManifestDB, channel, s3_client, document_path: str):
+    """Reindex a single document by S3 key"""
+    s3_key = document_path
+    
+    # Check if document is in manifest
+    manifest = db.get_manifest(tenant_id, s3_key)
+    if manifest and manifest.get("permanentlyDeleted", False):
+        print(f"[s3_producer] Document is permanently deleted, cannot reindex: {s3_key}")
+        return False
+    
+    # Check if object exists in S3
+    try:
+        s3_obj = s3_client.head_object(Bucket=BUCKET_NAME, Key=s3_key)
+        s3_etag = s3_obj.get('ETag', '').strip('"')
+        s3_last_modified = s3_obj.get('LastModified')
+        s3_size = s3_obj.get('ContentLength', 0)
+    except ClientError as e:
+        if e.response['Error']['Code'] == '404':
+            print(f"[s3_producer] Object not found in S3: {s3_key}")
+            return False
+        else:
+            print(f"[s3_producer] Error checking S3 object {s3_key}: {e}")
+            return False
+    
+    # Re-download and re-enqueue
+    s3_obj_dict = {
+        'Key': s3_key,
+        'ETag': s3_etag,
+        'LastModified': s3_last_modified,
+        'Size': s3_size,
+    }
+    if discover_and_store_s3_document(s3_obj_dict, tenant_id, db, channel, s3_client):
+        print(f"[s3_producer] Re-enqueued single document: {s3_key}")
+        return True
+    return False
+
+
+def fetch_new_documents(tenant_id: str, db: ManifestDB, channel, s3_client, max_docs: int):
+    """Fetch new documents from S3"""
+    print(f"[s3_producer] Fetching up to {max_docs} new documents from S3 for tenant '{tenant_id}'...")
+    
     scan_start = time.time()
     enqueued = 0
     skipped = 0
     errors = 0
-    
-    print(f"[s3_producer] Starting scan of S3 bucket '{BUCKET_NAME}' for tenant '{tenant_id}'...")
-    if max_docs:
-        print(f"[s3_producer] Limit: {max_docs} documents")
     
     # List all objects for this tenant (both main folder and uploads folder)
     all_s3_objects = []
@@ -306,17 +510,20 @@ def scan_s3_tenant(tenant_id: str, db: ManifestDB, channel, s3_client, max_docs:
     
     if not s3_objects:
         print(f"[s3_producer] No objects found for tenant '{tenant_id}'")
-        return
+        return 0, 0, 0
     
     print(f"[s3_producer] Found {len(s3_objects)} objects in S3")
+    print(f"[s3_producer] Will process up to {max_docs} NEW documents (already-indexed documents will be skipped)")
     
+    processed = 0
     for s3_obj in s3_objects:
-        # Check limit
-        if max_docs and enqueued >= max_docs:
-            print(f"[s3_producer] Reached limit of {max_docs} documents, stopping")
+        # Check limit - we want max_docs NEW documents, so continue until we've enqueued that many
+        if enqueued >= max_docs:
+            print(f"[s3_producer] Reached limit of {max_docs} new documents enqueued, stopping")
             break
+        processed += 1
         try:
-            if discover_and_store_s3_document(s3_obj, tenant_id, db, channel, s3_client):
+            if discover_and_store_s3_document(s3_obj, tenant_id, db, channel, s3_client, fetch_new_only=True):
                 enqueued += 1
             else:
                 skipped += 1
@@ -324,32 +531,83 @@ def scan_s3_tenant(tenant_id: str, db: ManifestDB, channel, s3_client, max_docs:
             print(f"[s3_producer] Error processing {s3_obj['Key']}: {e}")
             errors += 1
     
+    print(f"[s3_producer] Processed {processed} objects from S3")
+    
     scan_total_time = time.time() - scan_start
     print(f"[s3_producer] Scan complete: {enqueued} enqueued, {skipped} skipped, {errors} errors")
     print(f"[s3_producer] Total scan time: {scan_total_time:.3f}s")
+    return enqueued, skipped, errors
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: s3_producer.py <tenant_id> [max_docs]")
-        print("  Example: s3_producer.py s3-tenant-1")
-        print("  Example: s3_producer.py s3-tenant-2 20")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="S3 Producer")
+    parser.add_argument("tenant", nargs="?", help="Tenant ID (e.g., s3-tenant-1, s3-tenant-2)")
+    parser.add_argument("--check-existing", action="store_true", help="Check existing manifest entries for changes")
+    parser.add_argument("--force-reindex", action="store_true", help="Force reindex all existing documents in manifest")
+    parser.add_argument("--reindex-document", type=str, help="Reindex a specific document by S3 key")
+    parser.add_argument("--fetch-new", type=int, help="Number of new documents to fetch")
     
-    tenant_id = sys.argv[1]
-    max_docs = None
-    if len(sys.argv) >= 3:
-        try:
-            max_docs = int(sys.argv[2])
-        except ValueError:
-            print(f"Warning: Invalid max_docs value '{sys.argv[2]}', ignoring limit")
+    # Legacy support: if first arg is tenant and second is a number, treat it as fetch-new
+    args = parser.parse_args()
+    
+    # Handle legacy format: python s3_producer.py s3-tenant-1 20
+    if len(sys.argv) >= 3 and sys.argv[2].isdigit() and not args.fetch_new:
+        args.fetch_new = int(sys.argv[2])
+    
+    # For reindex-document, tenant can be optional (extracted from path)
+    if args.reindex_document:
+        # Extract tenant from S3 key if not provided
+        if not args.tenant:
+            key_parts = args.reindex_document.split('/')
+            if key_parts[0] in ["s3-tenant-1", "s3-tenant-2"]:
+                tenant_id = key_parts[0]
+            elif len(key_parts) > 1 and key_parts[0] == "uploads" and key_parts[1] in ["s3-tenant-1", "s3-tenant-2"]:
+                tenant_id = key_parts[1]
+            else:
+                print(f"Error: Cannot determine tenant from path '{args.reindex_document}'. Please provide tenant.")
+                sys.exit(1)
+        else:
+            tenant_id = args.tenant
+    else:
+        if not args.tenant:
+            print("Error: tenant is required (unless using --reindex-document)")
+            sys.exit(1)
+        tenant_id = args.tenant
     
     # Validate tenant ID
     if tenant_id not in ["s3-tenant-1", "s3-tenant-2"]:
         print(f"Warning: Unknown tenant '{tenant_id}'. Expected: s3-tenant-1 or s3-tenant-2")
-        response = input("Continue anyway? (y/N): ")
+        # In non-interactive mode (FastAPI), just continue
+        if sys.stdin.isatty():
+            response = input("Continue anyway? (y/N): ")
+            if response.lower() != 'y':
+                sys.exit(1)
+    
+    # Default behavior: if no flags, check existing only
+    if not args.check_existing and not args.force_reindex and not args.reindex_document and not args.fetch_new:
+        args.check_existing = True
+    
+    # Confirmation prompt when run manually (not via FastAPI)
+    if sys.stdin.isatty():
+        print("\n" + "="*70)
+        print(f"S3 Producer - Tenant: {tenant_id}")
+        print("="*70)
+        if args.check_existing:
+            print("✓ Will check existing documents in manifest for changes")
+        if args.force_reindex:
+            print("⚠ Will FORCE REINDEX all existing documents in manifest")
+            print("  WARNING: This can be time-consuming and resource-intensive!")
+        if args.reindex_document:
+            print(f"✓ Will reindex single document: {args.reindex_document}")
+        if args.fetch_new:
+            print(f"✓ Will fetch up to {args.fetch_new} NEW documents from S3")
+            print("  (Already-indexed documents will be automatically skipped)")
+        print("="*70)
+        response = input("\nProceed? (y/N): ")
         if response.lower() != 'y':
-            sys.exit(1)
+            print("Cancelled.")
+            sys.exit(0)
+        print()
     
     # Initialize database, RabbitMQ, and S3
     try:
@@ -366,7 +624,38 @@ def main():
             sys.exit(1)
         
         try:
-            scan_s3_tenant(tenant_id, db, channel, s3_client, max_docs)
+            total_checked = 0
+            total_enqueued = 0
+            
+            # Reindex single document
+            if args.reindex_document:
+                print(f"\n[s3_producer] Reindexing single document: {args.reindex_document}")
+                success = reindex_single_document(tenant_id, db, channel, s3_client, args.reindex_document)
+                if success:
+                    total_enqueued += 1
+            # Force reindex all existing documents
+            elif args.force_reindex:
+                print(f"\n[s3_producer] Force reindexing all existing documents for tenant '{tenant_id}'...")
+                checked, enqueued = force_reindex_all_documents(tenant_id, db, channel, s3_client)
+                total_checked += checked
+                total_enqueued += enqueued
+            # Check existing documents
+            elif args.check_existing:
+                print(f"\n[s3_producer] Checking existing documents for tenant '{tenant_id}'...")
+                checked, enqueued = check_existing_documents(tenant_id, db, channel, s3_client)
+                total_checked += checked
+                total_enqueued += enqueued
+            
+            # Fetch new documents
+            if args.fetch_new:
+                print(f"\n[s3_producer] Fetching new documents for tenant '{tenant_id}'...")
+                enqueued, skipped, errors = fetch_new_documents(tenant_id, db, channel, s3_client, args.fetch_new)
+                total_enqueued += enqueued
+            
+            print(f"\n[s3_producer] ===== SUMMARY =====")
+            print(f"[s3_producer] Checked existing: {total_checked} files")
+            print(f"[s3_producer] Total enqueued: {total_enqueued} documents")
+            print(f"[s3_producer] ====================")
         finally:
             connection.close()
             

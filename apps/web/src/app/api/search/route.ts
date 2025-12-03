@@ -27,10 +27,14 @@ export async function GET(request: Request) {
     const page = parseInt(url.searchParams.get("page") || "1", 10);
     const pageSize = parseInt(url.searchParams.get("pageSize") || "10", 10);
     const bypassCache = url.searchParams.get("bypassCache") === "true";
-    const allowFuzzy = url.searchParams.get("allowFuzzy") === "true";
 
     // Allow empty query for "match all" (loading last documents)
     const isEmptyQuery = !q.trim();
+    
+    // Get sort parameters (default based on query type)
+    const sortByParam = url.searchParams.get("sortBy");
+    const sortBy = sortByParam || (isEmptyQuery ? "created_at" : "_score");
+    const sortOrder = (url.searchParams.get("sortOrder") || "desc") as "asc" | "desc";
 
     // Filter out common stop words from the query
     // These are words that don't add semantic meaning and can cause noise in search results
@@ -168,6 +172,7 @@ export async function GET(request: Request) {
     const esStart = performance.now();
     let searchResult;
     let fuzzySearchUsed = false;
+    let collapsedDocumentCount: number | null = null; // Store collapsed document count for empty queries (will be set if collapse is used)
     const exactSearchMetrics = { time: 0, took: 0, hits: 0 };
     const fuzzySearchMetrics = { time: 0, took: 0, hits: 0 };
     
@@ -198,9 +203,17 @@ export async function GET(request: Request) {
       size: isEmptyQuery 
         ? Math.max(1000, pageSize * 50) // For empty queries, fetch more chunks to ensure we get enough unique documents
         : Math.max(100, pageSize * 10), // For search queries, smaller size is fine
-      sort: isEmptyQuery 
-        ? [{ created_at: { order: "desc" } }] // Sort by creation date for empty query
-        : [{ _score: { order: "desc" } }], // Sort by relevance for search queries
+      sort: sortBy === "_score" 
+        ? [{ _score: { order: sortOrder } }] // Sort by relevance
+        : sortBy === "created_at"
+        ? [{ created_at: { order: sortOrder } }] // Sort by creation date
+        : sortBy === "title"
+        ? [{ "title.keyword": { order: sortOrder } }] // Sort by title
+        : sortBy === "tenant_id"
+        ? [{ tenant_id: { order: sortOrder } }] // Sort by tenant (tenant_id is a keyword field)
+        : isEmptyQuery 
+        ? [{ created_at: { order: "desc" } }] // Default: creation date for empty query
+        : [{ _score: { order: "desc" } }], // Default: relevance for search queries
       collapse: isEmptyQuery 
         ? {
             field: "document_id", // Collapse to one chunk per document
@@ -221,6 +234,7 @@ export async function GET(request: Request) {
       
       if (isEmptyQuery) {
         // Match all documents when query is empty
+        // Elasticsearch automatically load balances between primary and replica shards
         exactResult = await elasticsearch.search({
           index: indexPattern,
           query: {
@@ -272,6 +286,16 @@ export async function GET(request: Request) {
                 },
               },
               {
+                // Phrase match in content (for when title is prepended to content)
+                // This gives high weight to title matches that appear in content
+                match_phrase: {
+                  content: {
+                    query: filteredQuery,
+                    boost: 8, // High boost for phrase matches in content (likely title)
+                  },
+                },
+              },
+              {
                 // Prefix match for each term in content
                 bool: {
                   must: searchTerms.map((term: string) => ({
@@ -313,6 +337,13 @@ export async function GET(request: Request) {
         searchResult = exactResult;
         metrics.elasticsearchTime = exactSearchMetrics.time;
         
+        // Store the collapsed document count before expanding inner_hits
+        // When using collapse, hits.hits.length is the number of unique documents
+        // hits.total.value is the total number of chunks (before collapse)
+        if (exactResult.hits.hits.length > 0 && exactResult.hits.hits[0].inner_hits) {
+          collapsedDocumentCount = exactResult.hits.hits.length;
+        }
+        
         // If collapse was used, expand the inner_hits to get the actual chunk data
         if (exactResult.hits.hits.length > 0 && exactResult.hits.hits[0].inner_hits) {
           // Replace collapsed hits with their inner_hits
@@ -345,12 +376,8 @@ export async function GET(request: Request) {
           exactDocumentMap.set(documentKey, true);
         }
 
-        if (exactDocumentMap.size > 0) {
-          // Exact match found results - use it
-          searchResult = exactResult;
-          metrics.elasticsearchTime = exactSearchMetrics.time;
-        } else if (allowFuzzy) {
-          // No exact match and fuzzy is allowed - try fuzzy search
+        if (exactDocumentMap.size === 0) {
+          // No exact matches found - automatically try fuzzy search
           // Fuzzy search allows character substitutions (e.g., "dack" -> "dick", "dick" -> "dock")
           // This is different from exact search which only allows prefix matching
           fuzzySearchUsed = true;
@@ -426,8 +453,8 @@ export async function GET(request: Request) {
           searchResult = fuzzyResult;
           metrics.elasticsearchTime = exactSearchMetrics.time + fuzzySearchMetrics.time;
         } else {
-          // No exact match and fuzzy not allowed - return empty results
-          searchResult = exactResult; // Use exact result (empty)
+          // Exact match found results - use exact results
+          searchResult = exactResult;
           metrics.elasticsearchTime = exactSearchMetrics.time;
         }
       }
@@ -614,10 +641,16 @@ export async function GET(request: Request) {
      * - page: current page number
      * - pageSize: documents per page
      */
+    // For empty queries with collapse, use the collapsed document count we stored earlier
+    // Otherwise use the grouped document count from allResults
+    const totalDocuments = collapsedDocumentCount !== null
+      ? collapsedDocumentCount // Use collapsed count (one hit per document)
+      : allResults.length; // Use grouped count
+    
     const responseData = {
       results,
       facets,
-      total: allResults.length, // Total unique documents (before pagination)
+      total: totalDocuments, // Total unique documents (before pagination)
       totalChunks: typeof searchResult.hits.total === "object" 
         ? searchResult.hits.total.value 
         : searchResult.hits.total || 0, // Total chunk hits from ES (for reference)

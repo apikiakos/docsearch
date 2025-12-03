@@ -191,7 +191,6 @@ Create a `.env` file in the **project root** (not in `apps/web/`):
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/docsearch?schema=public"
 
 # NextAuth
-AUTH_SECRET="your-secret-key-here-change-in-production"
 # For production (public URL)
 NEXTAUTH_URL="https://your-production-domain.com"
 # For development (internal URL - used for callbacks in dev)
@@ -207,10 +206,10 @@ ELASTICSEARCH_URL="http://localhost:9200"
 REDIS_URL="redis://localhost:6379"
 
 # AWS S3 Configuration (for seed_s3_from_gutendex.py and CloudFormation)
-AWS_ACCESS_KEY_ID="your-aws-access-key"
-AWS_SECRET_ACCESS_KEY="your-aws-secret-key"
-AWS_DEFAULT_REGION="us-east-1"
-AWS_S3_BUCKET="your-bucket-name"
+AWS_ACCESS_KEY_ID=""
+AWS_SECRET_ACCESS_KEY="your-secret-access-key"
+AWS_DEFAULT_REGION="eu-west-1"
+AWS_S3_BUCKET="document-search-tenants"
 
 # Admin Interface Configuration (optional, for demo purposes)
 # Comma-separated list of tenant slugs to display in admin interface

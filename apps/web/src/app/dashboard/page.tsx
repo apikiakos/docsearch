@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { IndexInfo } from "./tenants/[slug]/index-info";
 import { TenantDocuments } from "./tenants/[slug]/tenant-documents";
+import { TenantActions } from "@/components/tenant-actions";
+import { AdminDashboardCard } from "@/components/admin-dashboard-card";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -52,12 +54,28 @@ export default async function DashboardPage() {
       );
     }
 
+    // Determine producer type based on tenant slug
+    const getProducerType = (slug: string): "gutenberg" | "s3" | "govdocs" | undefined => {
+      if (slug === "gutenberg") return "gutenberg";
+      if (slug.startsWith("s3-tenant")) return "s3";
+      if (slug === "govdocs") return "govdocs";
+      return undefined;
+    };
+
     return (
       <div className="space-y-6">
         <PageHeader
           breadcrumbs={[{ label: "Dashboard" }]}
           title={tenant.name}
           subtitle={`Tenant details and document search`}
+          actions={
+            <TenantActions
+              tenantSlug={tenant.slug}
+              tenantName={tenant.name}
+              isAdmin={false} // Tenant users can't run producers
+              producerType={getProducerType(tenant.slug)}
+            />
+          }
         />
 
         <Tabs defaultValue="general" className="space-y-6">
@@ -130,7 +148,10 @@ export default async function DashboardPage() {
           </TabsContent>
 
           <TabsContent value="documents" className="space-y-6">
-            <TenantDocuments tenantSlug={tenant.slug} />
+            <TenantDocuments 
+              tenantSlug={tenant.slug} 
+              userRole={tenantMembership.role as "platform_admin" | "tenant_admin" | "tenant_user"}
+            />
           </TabsContent>
         </Tabs>
       </div>
@@ -150,49 +171,30 @@ export default async function DashboardPage() {
         <SystemStatus />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>Search Documents</CardTitle>
-            <CardDescription>
-              Search through indexed documents
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Use the search functionality to find documents across your accessible tenants.
-            </p>
-          </CardContent>
-        </Card>
+      {isPlatformAdmin && (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <AdminDashboardCard
+            title="Search Documents"
+            description="Search through indexed documents"
+            content="Use the search functionality to find documents across your accessible tenants."
+            href="/documents"
+          />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Index Documents</CardTitle>
-            <CardDescription>
-              Add new documents to the search index
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Upload and index new documents for full-text search.
-            </p>
-          </CardContent>
-        </Card>
+          <AdminDashboardCard
+            title="Index Documents"
+            description="Add new documents to the search index"
+            content="Upload and index new documents for full-text search."
+            openUploadDialog={true}
+          />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Manage Tenants</CardTitle>
-            <CardDescription>
-              View and manage tenant access
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Manage your tenant memberships and access levels.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+          <AdminDashboardCard
+            title="Manage Tenants"
+            description="View and manage tenant access"
+            content="Manage your tenant memberships and access levels."
+            href="/tenants"
+          />
+        </div>
+      )}
     </div>
   );
 }

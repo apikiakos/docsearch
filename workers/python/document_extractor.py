@@ -129,6 +129,42 @@ def _extract_pdf(path: Path) -> str:
         return ""
 
 
+def _extract_html_meta_tags(soup) -> dict:
+    """
+    Extract meta tags from HTML soup.
+    
+    Extracts:
+    - title (from <title> tag)
+    - og:title, og:description, og:url, og:image (Open Graph tags)
+    - description, keywords (standard meta tags)
+    - Any other meta tags with name or property attributes
+    """
+    meta = {}
+    
+    # Extract title
+    title_tag = soup.find("title")
+    if title_tag:
+        meta["title"] = title_tag.get_text(strip=True)
+    
+    # Extract meta tags
+    for meta_tag in soup.find_all("meta"):
+        # Check for name attribute (standard meta tags)
+        name = meta_tag.get("name", "").lower()
+        if name:
+            content = meta_tag.get("content", "")
+            if content:
+                meta[name] = content
+        
+        # Check for property attribute (Open Graph, etc.)
+        property_attr = meta_tag.get("property", "").lower()
+        if property_attr:
+            content = meta_tag.get("content", "")
+            if content:
+                meta[property_attr] = content
+    
+    return meta
+
+
 def _extract_html_with_metadata(path: Path) -> dict:
     """
     Extract text and metadata from HTML file.

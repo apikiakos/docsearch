@@ -101,6 +101,9 @@ export async function GET(request: Request) {
             documentCount = 0;
           } else {
             // Count unique documents by using a cardinality aggregation on document_id
+            // Note: Documents enqueued by the producer need to be processed by the consumer
+            // before they appear in Elasticsearch. There may be a delay between enqueueing
+            // and indexing.
             const aggResult = await elasticsearch.search({
               index: indexName,
               size: 0,
@@ -113,6 +116,10 @@ export async function GET(request: Request) {
               },
             });
             documentCount = (aggResult.aggregations?.unique_documents as { value: number })?.value || 0;
+            // Debug logging for document count
+            if (process.env.NODE_ENV === "development") {
+              console.log(`[Tenants API] Tenant ${t.slug} document count: ${documentCount}`);
+            }
           }
         } catch (error) {
           // If index doesn't exist or there's an error, documentCount remains 0
@@ -124,6 +131,8 @@ export async function GET(request: Request) {
             if (errorType !== "index_not_found_exception") {
               console.error(`Error getting document count for tenant ${t.slug}:`, error);
             }
+          } else {
+            console.error(`Error getting document count for tenant ${t.slug}:`, error);
           }
         }
 

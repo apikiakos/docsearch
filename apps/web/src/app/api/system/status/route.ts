@@ -144,6 +144,55 @@ export async function GET() {
     });
   }
 
+  // Check FastAPI service
+  try {
+    const fastapiUrl = process.env.FASTAPI_URL || "http://localhost:8000";
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    
+    try {
+      const healthResponse = await fetch(`${fastapiUrl}/health`, {
+        signal: controller.signal,
+      });
+
+      if (!healthResponse.ok) {
+        throw new Error(`HTTP ${healthResponse.status}`);
+      }
+
+      clearTimeout(timeoutId);
+      services.push({
+        name: "FastAPI",
+        status: "running",
+        url: fastapiUrl,
+        lastChecked: now,
+      });
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      // Provide better error messages
+      if (fetchError instanceof Error) {
+        if (fetchError.name === "AbortError" || fetchError.message.includes("aborted")) {
+          throw new Error("Connection timeout - service not responding");
+        }
+        if (fetchError.message.includes("ECONNREFUSED") || fetchError.message.includes("fetch failed")) {
+          throw new Error("Connection refused - service may not be running");
+        }
+      }
+      throw fetchError;
+    }
+  } catch (error) {
+    const fastapiUrl = process.env.FASTAPI_URL || "http://localhost:8000";
+    const errorMessage = error instanceof Error 
+      ? (error.message.includes("timeout") ? "Service not responding (timeout)" : error.message)
+      : "Connection failed";
+    services.push({
+      name: "FastAPI",
+      status: "stopped",
+      url: fastapiUrl,
+      error: errorMessage,
+      lastChecked: now,
+    });
+  }
+
   // Check RabbitMQ and get queue message count
   try {
     const rabbitmqUrl = process.env.RABBITMQ_URL || "http://localhost:15672";

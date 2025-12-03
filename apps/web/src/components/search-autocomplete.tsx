@@ -12,14 +12,12 @@ import { Label } from '@/components/ui/label'
 interface AutoCompleteProps {
   value?: string
   onChange?: (value: string) => void
-  onSearch?: (value: string, bypassCache?: boolean, allowFuzzy?: boolean) => void
+  onSearch?: (value: string, bypassCache?: boolean) => void
   tenantSlug?: string
   className?: string
   placeholder?: string
   onBypassCacheChange?: (checked: boolean) => void
   bypassCache?: boolean
-  onAllowFuzzyChange?: (checked: boolean) => void
-  allowFuzzy?: boolean
   isLoading?: boolean
 }
 
@@ -32,8 +30,6 @@ export default function SearchAutocomplete({
   placeholder = "Search documents...",
   onBypassCacheChange,
   bypassCache = false,
-  onAllowFuzzyChange,
-  allowFuzzy = false,
   isLoading = false,
 }: AutoCompleteProps) {
   const router = useRouter()
@@ -74,15 +70,14 @@ export default function SearchAutocomplete({
       }
       
       if (onSearch) {
-        onSearch(trimmedValue, bypassCache, allowFuzzy)
+        onSearch(trimmedValue, bypassCache)
       } else {
         const params = new URLSearchParams({
           q: trimmedValue,
           ...(tenantSlug && { tenant: tenantSlug }),
           ...(bypassCache && { bypassCache: 'true' }),
-          ...(allowFuzzy && { allowFuzzy: 'true' }),
         })
-        router.push(`/dashboard/documents?${params}`)
+        router.push(`/documents?${params}`)
       }
     }
   }
@@ -91,9 +86,6 @@ export default function SearchAutocomplete({
     onBypassCacheChange?.(checked)
   }
 
-  const handleAllowFuzzyChange = (checked: boolean) => {
-    onAllowFuzzyChange?.(checked)
-  }
 
   return (
     <div className={cn("relative w-full", className)}>
@@ -125,21 +117,6 @@ export default function SearchAutocomplete({
             className="text-sm font-normal cursor-pointer"
           >
             Bypass query caching
-          </Label>
-        </div>
-
-        {/* Allow fuzzy search checkbox */}
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="allow-fuzzy"
-            checked={allowFuzzy}
-            onCheckedChange={(checked) => handleAllowFuzzyChange(checked === true)}
-          />
-          <Label
-            htmlFor="allow-fuzzy"
-            className="text-sm font-normal cursor-pointer"
-          >
-            Allow fuzzy search
           </Label>
         </div>
 

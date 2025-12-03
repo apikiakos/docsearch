@@ -67,6 +67,7 @@ class ManifestDB:
                             etag TEXT,
                             "lastIndexedAt" TIMESTAMP(3) WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
                             "isDeleted" BOOLEAN NOT NULL DEFAULT FALSE,
+                            "permanentlyDeleted" BOOLEAN NOT NULL DEFAULT FALSE,
                             UNIQUE ("tenantId", path)
                         );
                         CREATE INDEX IF NOT EXISTS idx_file_manifest_tenant_deleted 
@@ -83,6 +84,16 @@ class ManifestDB:
                     if not cur.fetchone():
                         cur.execute('ALTER TABLE file_manifest ADD COLUMN IF NOT EXISTS etag TEXT;')
                         conn.commit()
+                    
+                    # Check if permanentlyDeleted column exists, add it if not
+                    cur.execute("""
+                        SELECT column_name 
+                        FROM information_schema.columns 
+                        WHERE table_name = 'file_manifest' AND column_name = 'permanentlyDeleted';
+                    """)
+                    if not cur.fetchone():
+                        cur.execute('ALTER TABLE file_manifest ADD COLUMN IF NOT EXISTS "permanentlyDeleted" BOOLEAN NOT NULL DEFAULT FALSE;')
+                        conn.commit()
 
     def get_manifest(self, tenant_id: str, path: str) -> Optional[Dict]:
         """Get manifest entry for a file"""
@@ -94,6 +105,18 @@ class ManifestDB:
                 """, (tenant_id, path))
                 row = cur.fetchone()
                 return dict(row) if row else None
+
+    def get_all_manifest_entries(self, tenant_id: str) -> List[Dict]:
+        """Get all manifest entries for a tenant"""
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT * FROM file_manifest
+                    WHERE "tenantId" = %s AND "isDeleted" = FALSE
+                    ORDER BY "lastIndexedAt" DESC
+                """, (tenant_id,))
+                rows = cur.fetchall()
+                return [dict(row) for row in rows]
 
     def insert_manifest(
         self,
@@ -147,16 +170,50 @@ class ManifestDB:
                 """, (last_mtime, size_bytes, content_hash, etag, tenant_id, path))
                 conn.commit()
 
-    def mark_deleted(self, tenant_id: str, path: str):
-        """Mark a file as deleted"""
+    def update_manifest_by_document_id(
+        self,
+        tenant_id: str,
+        document_id: str,
+        last_mtime: datetime,
+        size_bytes: int,
+        content_hash: Optional[str] = None,
+        etag: Optional[str] = None
+    ):
+        """Update manifest entry by document_id (useful when path in message doesn't match path in manifest, e.g., S3 documents)"""
+        with self._get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE file_manifest
+                    SET "lastMtime" = %s,
+                        "sizeBytes" = %s,
+                        "contentHash" = %s,
+                        etag = %s,
+                        "lastIndexedAt" = CURRENT_TIMESTAMP,
+                        "isDeleted" = FALSE
+                    WHERE "tenantId" = %s AND "documentId" = %s
+                """, (last_mtime, size_bytes, content_hash, etag, tenant_id, document_id))
+                rows_updated = cur.rowcount
+                conn.commit()
+                return rows_updated > 0
+
+    def mark_deleted(self, tenant_id: str, path: str, permanent: bool = False):
+        """Mark a file as deleted
+        
+        Args:
+            tenant_id: Tenant ID
+            path: File path
+            permanent: If True, mark as permanently deleted (won't be reindexed).
+                      If False, mark as deleted but can be reindexed later.
+        """
         with self._get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
                     UPDATE file_manifest
                     SET "isDeleted" = TRUE,
+                        "permanentlyDeleted" = %s,
                         "lastIndexedAt" = CURRENT_TIMESTAMP
                     WHERE "tenantId" = %s AND path = %s
-                """, (tenant_id, path))
+                """, (permanent, tenant_id, path))
                 conn.commit()
 
     def list_manifest_for_tenant(self, tenant_id: str, include_deleted: bool = False) -> List[Dict]:

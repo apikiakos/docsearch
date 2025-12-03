@@ -38,7 +38,11 @@ def connect_rabbitmq():
 
 
 def connect_elastic():
-    es = Elasticsearch(ELASTIC_URL)
+    # Configure client to work with Elasticsearch 7.x/8.x servers
+    es = Elasticsearch(
+        ELASTIC_URL,
+        request_timeout=30
+    )
     return es
 
 
@@ -52,7 +56,21 @@ def build_index_name(tenant_id: str) -> str:
 
 def ensure_index(es: Elasticsearch, index_name: str):
     """Ensure Elasticsearch index exists with proper mapping, shards, and replicas"""
-    if not es.indices.exists(index=index_name):
+    # Check if index exists - handle API version differences
+    index_exists = False
+    try:
+        # Try the standard method first
+        index_exists = es.indices.exists(index=index_name)
+    except Exception as e:
+        # If that fails, try alternative: attempt to get index settings (will fail if doesn't exist)
+        try:
+            es.indices.get_settings(index=index_name)
+            index_exists = True
+        except Exception:
+            # Index doesn't exist
+            index_exists = False
+    
+    if not index_exists:
         mapping = {
             "settings": {
                 "number_of_shards": 3,
@@ -160,14 +178,16 @@ def process_upsert(es: Elasticsearch, message: dict):
     
     # Validate that path is a local file (not a URL)
     if path.startswith("http://") or path.startswith("https://"):
-        print(f"[consumer] ERROR: Received URL instead of local file path: {path}")
+        error_msg = f"[consumer] ERROR: Received URL instead of local file path: {path}"
+        print(error_msg)
         print("[consumer] Producer should download and store files locally before enqueuing")
-        return
+        raise ValueError(error_msg)
     
     # Check if file exists
     if not os.path.exists(path):
-        print(f"[consumer] ERROR: File not found: {path}")
-        return
+        error_msg = f"[consumer] ERROR: File not found: {path}"
+        print(error_msg)
+        raise FileNotFoundError(error_msg)
     
     # Calculate queue time if producer timestamp is available
     queue_time = 0
@@ -194,16 +214,18 @@ def process_upsert(es: Elasticsearch, message: dict):
             text = extraction_result.get("text", "")
             html_meta = extraction_result.get("html_meta", {})
     except Exception as e:
-        print(f"[consumer] Error extracting text from {path}: {e}")
+        error_msg = f"[consumer] Error extracting text from {path}: {e}"
+        print(error_msg)
         import traceback
         traceback.print_exc()
-        return
+        raise RuntimeError(error_msg) from e
     
     extract_time = (time.time() - extract_start) * 1000
     
     if not text or not text.strip():
-        print(f"[consumer] Empty or unreadable content: {path}")
-        return
+        error_msg = f"[consumer] Empty or unreadable content: {path}"
+        print(error_msg)
+        raise ValueError(error_msg)
     
     print(f"[consumer] Extracted {len(text)} characters from {path} (extraction: {extract_time:.2f}ms)")
     if html_meta:
@@ -231,12 +253,6 @@ def process_upsert(es: Elasticsearch, message: dict):
         print(f"[consumer] Note: Could not delete old chunks (may not exist): {e}")
         delete_time = 0
 
-    # Consumer responsibility: chunk the extracted text
-    chunk_start = time.time()
-    chunks = chunk_text(text, chunk_size=400, overlap=100)
-    chunk_time = (time.time() - chunk_start) * 1000
-    print(f"[consumer] Chunking time: {chunk_time:.2f}ms ({len(chunks)} chunks)")
-
     # Get title from HTML meta, message metadata, or filename
     # Note: message_metadata was already extracted above for debugging
     if "message_metadata" not in locals():
@@ -248,6 +264,17 @@ def process_upsert(es: Elasticsearch, message: dict):
         message_metadata.get("title") or
         os.path.basename(path)
     )
+    
+    # Prepend title to the text content so it's searchable in the content field
+    # This ensures titles are always searchable even if they don't appear in the document body
+    # We add it with a separator so it's clear it's the title
+    text_with_title = f"{title}\n\n{text}" if title and title not in text[:500] else text
+    
+    # Consumer responsibility: chunk the extracted text
+    chunk_start = time.time()
+    chunks = chunk_text(text_with_title, chunk_size=400, overlap=100)
+    chunk_time = (time.time() - chunk_start) * 1000
+    print(f"[consumer] Chunking time: {chunk_time:.2f}ms ({len(chunks)} chunks)")
     
     # Handle html_meta being None
     if html_meta is None:
@@ -336,13 +363,78 @@ def process_upsert(es: Elasticsearch, message: dict):
         actions.append(action)
 
     if actions:
+        print(f"[consumer] Preparing to index {len(actions)} chunks for document {document_id}")
         index_start = time.time()
-        helpers.bulk(es, actions, refresh=True)
-        index_time = (time.time() - index_start) * 1000
-        total_time = (time.time() - process_start) * 1000
-        print(f"[consumer] Indexed {len(actions)} chunks for {path}")
-        print(f"[consumer] Elasticsearch indexing time: {index_time:.2f}ms")
-        print(f"[consumer] Total processing time: {total_time:.2f}ms")
+        try:
+            # helpers.bulk returns a tuple: (success_count, failed_items)
+            # With raise_on_error=True (default), it raises on any error
+            print(f"[consumer] Calling helpers.bulk() for {len(actions)} actions...")
+            result = helpers.bulk(es, actions, refresh=True, raise_on_error=True)
+            # result is a tuple: (success_count, failed_items_list)
+            success_count = result[0] if isinstance(result, tuple) else len(actions)
+            failed_items = result[1] if isinstance(result, tuple) and len(result) > 1 else []
+            
+            index_time = (time.time() - index_start) * 1000
+            total_time = (time.time() - process_start) * 1000
+            
+            if failed_items:
+                print(f"[consumer] ERROR: Failed to index {len(failed_items)} chunks for {path}")
+                for failed_item in failed_items:
+                    print(f"[consumer]   Failed item: {failed_item}")
+                raise RuntimeError(f"Failed to index {len(failed_items)} out of {len(actions)} chunks for {path}")
+            
+            print(f"[consumer] ✓ Successfully indexed {success_count} chunks for {path} (document_id: {document_id})")
+            print(f"[consumer] Elasticsearch indexing time: {index_time:.2f}ms")
+            print(f"[consumer] Total processing time: {total_time:.2f}ms")
+        except Exception as e:
+            index_time = (time.time() - index_start) * 1000
+            error_msg = f"[consumer] ERROR: Failed to index chunks for {path} (document_id: {document_id}): {e}"
+            print(error_msg)
+            import traceback
+            traceback.print_exc()
+            raise RuntimeError(error_msg) from e
+        
+        # Update manifest's lastIndexedAt after successful indexing
+        try:
+            from manifest import ManifestDB
+            
+            db = ManifestDB()
+            local_path = Path(path)
+            
+            if local_path.exists():
+                # Get file stats
+                stat = os.stat(path)
+                file_mtime = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+                file_size = stat.st_size
+                
+                # Try to update by document_id first (works for S3 documents where path doesn't match)
+                # If that fails, fall back to updating by path
+                updated = db.update_manifest_by_document_id(
+                    tenant_id,
+                    document_id,
+                    file_mtime,
+                    file_size,
+                    content_hash=None,  # Don't update hash on reindex
+                    etag=None  # Don't update etag on reindex
+                )
+                
+                if not updated:
+                    # Fall back to path-based update (for local files)
+                    db.update_manifest(
+                        tenant_id,
+                        path,
+                        file_mtime,
+                        file_size,
+                        content_hash=None,  # Don't update hash on reindex
+                        etag=None  # Don't update etag on reindex
+                    )
+                    print(f"[consumer] Updated manifest lastIndexedAt for {path} (by path)")
+                else:
+                    print(f"[consumer] Updated manifest lastIndexedAt for document_id {document_id} (by document_id)")
+        except Exception as e:
+            print(f"[consumer] Warning: Could not update manifest: {e}")
+            import traceback
+            traceback.print_exc()
     else:
         print(f"[consumer] No chunks generated for {path}")
 
@@ -362,19 +454,23 @@ def process_delete(es: Elasticsearch, message: dict):
         return
 
     try:
+        # Use query parameter directly (Elasticsearch 8.x API)
         result = es.delete_by_query(
             index=index_name,
-            body={
-                "query": {
-                    "term": {"document_id": document_id}
-                }
+            query={
+                "term": {"document_id": document_id}
             },
             refresh=True
         )
+        # Result structure: {"deleted": count, ...}
         deleted_count = result.get("deleted", 0)
-        print(f"[consumer] Deleted {deleted_count} chunks for document {document_id}")
+        print(f"[consumer] ✓ Deleted {deleted_count} chunks for document {document_id}")
     except Exception as e:
-        print(f"[consumer] Error deleting chunks: {e}")
+        error_msg = f"[consumer] ✗ Error deleting chunks for document {document_id}: {e}"
+        print(error_msg)
+        import traceback
+        traceback.print_exc()
+        raise RuntimeError(error_msg) from e
 
 
 def process_message(es: Elasticsearch, body: bytes):
@@ -396,10 +492,12 @@ def main():
 
     def callback(ch, method, properties, body):
         try:
+            print(f"[consumer] Received message (delivery_tag: {method.delivery_tag})")
             process_message(es, body)
+            print(f"[consumer] ✓ Successfully processed message (delivery_tag: {method.delivery_tag})")
             ch.basic_ack(delivery_tag=method.delivery_tag)
         except Exception as e:
-            print(f"[consumer] Error processing message: {e}")
+            print(f"[consumer] ✗ Error processing message (delivery_tag: {method.delivery_tag}): {e}")
             import traceback
             traceback.print_exc()
             # Nack with requeue (simple strategy)

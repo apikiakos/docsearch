@@ -22,17 +22,19 @@ type ServiceStatus = {
 
 const SERVICE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   PostgreSQL: Database, // Database icon for PostgreSQL
+  RabbitMQ: Layers, // Layers icon for RabbitMQ (message queue/stack)
   Elasticsearch: Search, // Search icon for Elasticsearch (search engine)
   Redis: Zap, // Zap icon for Redis (fast cache/memory)
-  RabbitMQ: Layers, // Layers icon for RabbitMQ (message queue/stack)
+  FastAPI: Zap, // Zap icon for FastAPI (API service)
 };
 
-// Logical flow order: Database -> Message Queue -> Search Engine -> Cache
+// Logical flow order: Database -> Message Queue -> Search Engine -> Cache -> API Service
 const SERVICE_ORDER: Record<string, number> = {
   PostgreSQL: 1,    // Database: stores user/tenant data and file manifest
   RabbitMQ: 2,      // Message Queue: receives document ingestion jobs
   Elasticsearch: 3, // Search Engine: indexes and searches documents
   Redis: 4,         // Cache: caches search results and rate limiting
+  FastAPI: 5,       // API Service: manages producer and consumer operations
 };
 
 const SERVICE_DESCRIPTIONS: Record<string, string> = {
@@ -40,6 +42,7 @@ const SERVICE_DESCRIPTIONS: Record<string, string> = {
   RabbitMQ: "Message queue that receives document ingestion jobs from producers",
   Elasticsearch: "Search engine that indexes document chunks and provides full-text search",
   Redis: "In-memory cache for search results and per-tenant rate limiting",
+  FastAPI: "API service that manages producer and consumer operations for document ingestion",
 };
 
 export function SystemStatus() {

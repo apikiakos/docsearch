@@ -27,7 +27,50 @@ export async function GET(_request: Request, context: Context) {
     });
 
     if (initialSearch.hits.hits.length === 0) {
-      return NextResponse.json({ error: "Document not found" }, { status: 404 });
+      // Document not found in Elasticsearch - check manifest to see if it's queued
+      console.error(`[documents/${id}] Document not found in Elasticsearch. documentId: ${documentId}`);
+      
+      // Check manifest to see if document exists there
+      const manifestEntry = await prisma.$queryRaw<Array<{
+        path: string;
+        tenantId: string;
+        lastIndexedAt: Date;
+        isDeleted: boolean;
+        permanentlyDeleted: boolean;
+      }>>`
+        SELECT path, "tenantId", "lastIndexedAt", "isDeleted", "permanentlyDeleted"
+        FROM file_manifest 
+        WHERE "documentId" = ${documentId}
+        LIMIT 1
+      `;
+
+      if (manifestEntry && manifestEntry.length > 0) {
+        const entry = manifestEntry[0];
+        if (entry.isDeleted || entry.permanentlyDeleted) {
+          return NextResponse.json({ 
+            error: "Document has been deleted.",
+            documentId,
+            deleted: true
+          }, { status: 404 });
+        }
+        
+        // Document is in manifest but not indexed - likely queued or processing failed
+        return NextResponse.json({ 
+          error: "Document is queued but not yet indexed. It may still be processing or may have failed to index.",
+          documentId,
+          queued: true,
+          manifest: {
+            path: entry.path,
+            tenantId: entry.tenantId,
+            lastIndexedAt: entry.lastIndexedAt,
+          }
+        }, { status: 404 });
+      }
+      
+      return NextResponse.json({ 
+        error: "Document not found in search index or manifest.",
+        documentId 
+      }, { status: 404 });
     }
 
     const hit = initialSearch.hits.hits[0]._source as { tenant_id: string; [key: string]: unknown };
@@ -98,10 +141,14 @@ export async function GET(_request: Request, context: Context) {
   }
 }
 
-export async function DELETE(_request: Request, context: Context) {
+export async function DELETE(request: Request, context: Context) {
   try {
     await requireAuth();
     const { id } = await context.params;
+    
+    // Check for permanent flag in query params
+    const url = new URL(request.url);
+    const permanent = url.searchParams.get("permanent") === "true";
 
     // Extract document_id
     const documentId = id.split("#chunk_")[0];
@@ -138,10 +185,27 @@ export async function DELETE(_request: Request, context: Context) {
       });
     }
 
-    await elasticsearch.bulk({
+    // Execute bulk delete and check for errors
+    const bulkResult = await elasticsearch.bulk({
       operations: bulkBody,
       refresh: "wait_for",
     });
+
+    // Check for failed deletions
+    if (bulkResult.errors) {
+      const failedItems = (bulkResult.items || []).filter(
+        (item: { delete?: { error?: unknown } }) => item.delete?.error
+      );
+      if (failedItems.length > 0) {
+        console.error(`[DELETE /documents/${id}] Failed to delete ${failedItems.length} chunks:`, failedItems);
+        // Continue anyway - we'll mark manifest as deleted even if some chunks failed
+      }
+    }
+
+    const deletedCount = (bulkResult.items || []).filter(
+      (item: { delete?: { result?: string } }) => item.delete?.result === "deleted"
+    ).length;
+    console.log(`[DELETE /documents/${id}] Deleted ${deletedCount} chunks from Elasticsearch`);
 
     // Mark document as deleted in manifest (if it exists)
     // We need to find the manifest entry by document_id
@@ -156,10 +220,10 @@ export async function DELETE(_request: Request, context: Context) {
       if (manifestEntry && manifestEntry.length > 0) {
         await prisma.$executeRaw`
           UPDATE file_manifest 
-          SET "isDeleted" = true 
+          SET "isDeleted" = true, "permanentlyDeleted" = ${permanent}
           WHERE id = ${manifestEntry[0].id}
         `;
-        console.log(`[DELETE /documents/${id}] Marked manifest entry as deleted: ${manifestEntry[0].id} (documentId: ${documentId})`);
+        console.log(`[DELETE /documents/${id}] Marked manifest entry as ${permanent ? 'permanently ' : ''}deleted: ${manifestEntry[0].id} (documentId: ${documentId})`);
       } else {
         console.warn(`[DELETE /documents/${id}] No manifest entry found for documentId: ${documentId}, tenant: ${tenantSlug}`);
       }

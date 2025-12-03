@@ -19,8 +19,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 
 type IndexInfo = {
   indexName: string;
@@ -49,7 +47,6 @@ export function IndexInfo({ tenantSlug, isPlatformAdmin = false }: IndexInfoProp
   const [mappingOpen, setMappingOpen] = useState(false);
   const [standardMappingOpen, setStandardMappingOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [clearManifest, setClearManifest] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
@@ -83,12 +80,6 @@ export function IndexInfo({ tenantSlug, isPlatformAdmin = false }: IndexInfoProp
     try {
       const response = await fetch(`/api/tenants/${tenantSlug}/index`, {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          clearManifest,
-        }),
       });
 
       if (!response.ok) {
@@ -99,7 +90,6 @@ export function IndexInfo({ tenantSlug, isPlatformAdmin = false }: IndexInfoProp
       // Refresh index info (will show as non-existent)
       setIndexInfo(null);
       setDeleteDialogOpen(false);
-      setClearManifest(false);
       
       // Refetch index info
       const fetchIndexInfo = async () => {
@@ -320,31 +310,18 @@ export function IndexInfo({ tenantSlug, isPlatformAdmin = false }: IndexInfoProp
             This will permanently delete the index <code className="font-mono text-xs bg-muted px-1 py-0.5 rounded">{indexInfo?.indexName || `docs_${tenantSlug}`}</code> for tenant <strong>{tenantSlug}</strong>.
             <br />
             <br />
-            This action cannot be undone. All documents in this index will be lost.
+            This action will:
+            <ul className="list-disc list-inside mt-2 space-y-1">
+              <li>Delete all Elasticsearch chunks for this tenant</li>
+              <li>Erase all manifest entries for this tenant</li>
+            </ul>
+            <br />
+            After this operation, you will have zero documents, zero chunks, and zero manifest entries for this tenant.
+            <br />
+            <br />
+            <strong>This action cannot be undone.</strong>
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-4">
-          <div className="flex items-start space-x-3">
-            <Checkbox
-              id="clear-manifest"
-              checked={clearManifest}
-              onCheckedChange={(checked) => setClearManifest(checked === true)}
-            />
-            <div className="space-y-1">
-              <Label
-                htmlFor="clear-manifest"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-              >
-                Also clear the manifest
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                {clearManifest
-                  ? "Manifest entries will be deleted. Documents can be reindexed when the producer runs next."
-                  : "Manifest entries will be marked as deleted. Documents will NOT be reindexed when the producer runs next."}
-              </p>
-            </div>
-          </div>
-        </div>
         <DialogFooter>
           <Button
             variant="outline"

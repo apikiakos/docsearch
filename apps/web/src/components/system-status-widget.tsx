@@ -22,17 +22,19 @@ type ServiceStatus = {
 
 const SERVICE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   PostgreSQL: Database, // Database icon for PostgreSQL
+  RabbitMQ: Layers, // Layers icon for RabbitMQ (message queue/stack)
   Elasticsearch: Search, // Search icon for Elasticsearch (search engine)
   Redis: Zap, // Zap icon for Redis (fast cache/memory)
-  RabbitMQ: Layers, // Layers icon for RabbitMQ (message queue/stack)
+  FastAPI: Zap, // Zap icon for FastAPI (API service)
 };
 
-// Logical flow order: Database -> Message Queue -> Search Engine -> Cache
+// Logical flow order: Database -> Message Queue -> Search Engine -> Cache -> API Service
 const SERVICE_ORDER: Record<string, number> = {
   PostgreSQL: 1,    // Database: stores user/tenant data and file manifest
   RabbitMQ: 2,      // Message Queue: receives document ingestion jobs
   Elasticsearch: 3, // Search Engine: indexes and searches documents
   Redis: 4,         // Cache: caches search results and rate limiting
+  FastAPI: 5,       // API Service: manages producer and consumer operations
 };
 
 const STATUS_VARIANTS: Record<string, "default" | "destructive" | "secondary"> = {
@@ -206,7 +208,7 @@ function ServiceDetailCard({ service }: { service: ServiceStatus }) {
 function SystemStatusSkeleton() {
   return (
     <div className="flex items-center gap-2">
-      {[1, 2, 3, 4].map((i: number) => (
+      {[1, 2, 3, 4, 5].map((i: number) => (
         <Badge key={i} variant="secondary" className="h-6 w-12 animate-pulse">
           <div className="h-3 w-3 rounded bg-muted" />
         </Badge>

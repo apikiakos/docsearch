@@ -15,13 +15,11 @@ const prisma = new PrismaClient({ adapter });
 async function main() {
   console.log("🌱 Seeding database...");
 
-  // Create tenants
+  // Create tenants (only the three core tenants for demo)
   const tenants = [
-    { slug: "gutenberg", name: "Project Gutenberg" },
-    { slug: "govdocs", name: "Government Documents" },
-    { slug: "alex-local", name: "Alex Local" },
     { slug: "s3-tenant-1", name: "S3 Tenant 1" },
     { slug: "s3-tenant-2", name: "S3 Tenant 2" },
+    { slug: "gutenberg", name: "Project Gutenberg" },
   ];
 
   const createdTenants = [];
@@ -66,13 +64,11 @@ async function main() {
   }
   console.log("✅ Created admin user: admin@example.com (password: admin123) with access to all tenants");
 
-  // Create tenant users (one for each tenant)
+  // Create tenant users (one for each of the three core tenants)
   const tenantUsers = [
-    { email: "gutenberg@example.com", name: "Gutenberg User", tenantSlug: "gutenberg" },
-    { email: "govdocs@example.com", name: "GovDocs User", tenantSlug: "govdocs" },
-    { email: "alex@example.com", name: "Alex User", tenantSlug: "alex-local" },
     { email: "s3-tenant-1@example.com", name: "S3 Tenant 1 User", tenantSlug: "s3-tenant-1" },
     { email: "s3-tenant-2@example.com", name: "S3 Tenant 2 User", tenantSlug: "s3-tenant-2" },
+    { email: "gutenberg@example.com", name: "Gutenberg User", tenantSlug: "gutenberg" },
   ];
 
   const userPasswordHash = await bcrypt.hash("user123", 10);

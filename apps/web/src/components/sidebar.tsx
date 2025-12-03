@@ -18,7 +18,7 @@ const navigation = [
   },
   {
     name: "Documents",
-    href: "/dashboard/documents",
+    href: "/documents",
     icon: Search,
   },
   {

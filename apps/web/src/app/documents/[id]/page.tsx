@@ -6,18 +6,11 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Loader2, Trash2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { DocumentViewer } from "@/components/document-viewer";
 import { getFileTypeInfo, normalizeFileType } from "@/lib/file-types";
 import { JsonHighlight } from "@/components/json-highlight";
+import { DocumentActions } from "@/components/document-actions";
 
 type DocumentData = {
   id: string;
@@ -40,8 +33,6 @@ export default function DocumentDetailPage() {
   const [document, setDocument] = useState<DocumentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     const fetchDocument = async () => {
@@ -50,17 +41,38 @@ export default function DocumentDetailPage() {
         const response = await fetch(`/api/documents/${id}`);
         
         if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
           if (response.status === 404) {
-            setError("Document not found");
+            const errorMsg = errorData.error || "Document not found";
+            const documentId = errorData.documentId;
+            
+            // Show more helpful message if document is queued
+            if (errorData.queued) {
+              setError(
+                `Document is queued but not yet indexed. It may still be processing or may have failed to index. (ID: ${documentId?.substring(0, 8) || "unknown"}...)`
+              );
+            } else if (errorData.deleted) {
+              setError("Document has been deleted.");
+            } else {
+              setError(
+                documentId 
+                  ? `${errorMsg} (ID: ${documentId.substring(0, 8)}...)`
+                  : errorMsg
+              );
+            }
           } else if (response.status === 403) {
             setError("You don't have access to this document");
           } else {
-            setError("Failed to load document");
+            setError(`Failed to load document: ${errorData.error || "Unknown error"}`);
           }
           return;
         }
         
         const data = await response.json();
+        if (!data.document) {
+          setError("Document data is missing from response");
+          return;
+        }
         setDocument(data.document);
       } catch (err) {
         console.error("Error fetching document:", err);
@@ -75,30 +87,6 @@ export default function DocumentDetailPage() {
     }
   }, [id]);
 
-  const handleDelete = async () => {
-    if (!document) return;
-
-    setDeleting(true);
-    try {
-      const response = await fetch(`/api/documents/${document.document_id}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to delete document");
-      }
-
-      // Redirect to documents list after successful deletion
-      router.push("/dashboard/documents");
-    } catch (err) {
-      console.error("Error deleting document:", err);
-      setError(err instanceof Error ? err.message : "Failed to delete document");
-      setDeleteDialogOpen(false);
-    } finally {
-      setDeleting(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -107,7 +95,7 @@ export default function DocumentDetailPage() {
           title="Loading..."
           breadcrumbs={[
             { label: "Dashboard", href: "/dashboard" },
-            { label: "Documents", href: "/dashboard/documents" },
+            { label: "Documents", href: "/documents" },
             { label: "Loading" },
           ]}
         />
@@ -127,7 +115,7 @@ export default function DocumentDetailPage() {
           title="Document Not Found"
           breadcrumbs={[
             { label: "Dashboard", href: "/dashboard" },
-            { label: "Documents", href: "/dashboard/documents" },
+            { label: "Documents", href: "/documents" },
             { label: "Not Found" },
           ]}
         />
@@ -147,18 +135,25 @@ export default function DocumentDetailPage() {
         subtitle={`Document ID: ${document.document_id}`}
         breadcrumbs={[
           { label: "Dashboard", href: "/dashboard" },
-          { label: "Documents", href: "/dashboard/documents" },
+          { label: "Documents", href: "/documents" },
           { label: document.title },
         ]}
         actions={
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => setDeleteDialogOpen(true)}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete
-          </Button>
+          document ? (
+            <DocumentActions
+              documentId={document.document_id}
+              title={document.title}
+              tenantId={document.tenant_id}
+              onDeleted={() => {
+                // Redirect to documents list after successful deletion
+                router.push("/documents");
+              }}
+              onReindexed={() => {
+                // Reload the page after reindexing
+                router.refresh();
+              }}
+            />
+          ) : null
         }
       />
 
@@ -371,53 +366,6 @@ export default function DocumentDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Document</DialogTitle>
-            <DialogDescription className="space-y-2">
-              <p>
-                Are you sure you want to delete &quot;{document.title}&quot;? This action cannot be undone.
-              </p>
-              <div className="text-sm space-y-1 pt-2 border-t">
-                <p className="font-medium">What will be deleted:</p>
-                <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                  <li>All document chunks from the Elasticsearch search index ({document.chunk_count || 0} chunk{document.chunk_count !== 1 ? "s" : ""})</li>
-                  <li>The document will no longer appear in search results</li>
-                  <li>The manifest entry will be marked as deleted (document tracking)</li>
-                </ul>
-                <p className="text-xs text-muted-foreground pt-2">
-                  Note: The original file (if stored in S3 or local storage) will remain, but it will be excluded from future indexing.
-                </p>
-              </div>
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteDialogOpen(false)}
-              disabled={deleting}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={deleting}
-            >
-              {deleting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                "Delete"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

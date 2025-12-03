@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { usePersistedPageSize } from "@/hooks/use-persisted-page-size";
 import {
   Table,
   TableBody,
@@ -12,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -19,7 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight, ArrowUpDown, Loader2 } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { SortableTableHeader } from "@/components/sortable-table-header";
 
 type Tenant = {
   id: string;
@@ -41,9 +44,10 @@ type Pagination = {
 export function TenantsTable() {
   const router = useRouter();
   const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [pageSize, setPageSize] = usePersistedPageSize();
   const [pagination, setPagination] = useState<Pagination>({
     page: 1,
-    limit: 10,
+    limit: pageSize,
     total: 0,
     totalPages: 0,
   });
@@ -51,6 +55,11 @@ export function TenantsTable() {
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
+  // Update pagination limit when pageSize changes
+  useEffect(() => {
+    setPagination((prev) => ({ ...prev, limit: pageSize, page: 1 }));
+  }, [pageSize]);
 
   const fetchTenants = async () => {
     setLoading(true);
@@ -79,7 +88,7 @@ export function TenantsTable() {
   useEffect(() => {
     fetchTenants();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.page, sortBy, sortOrder]);
+  }, [pagination.page, pagination.limit, sortBy, sortOrder]);
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -94,26 +103,10 @@ export function TenantsTable() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  const handleSort = (column: string) => {
-    if (sortBy === column) {
-      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-    } else {
-      setSortBy(column);
-      setSortOrder("desc");
-    }
+  const handleSort = (column: string, order: "asc" | "desc") => {
+    setSortBy(column);
+    setSortOrder(order);
   };
-
-  const SortButton = ({ column, children }: { column: string; children: React.ReactNode }) => (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="h-8 data-[state=open]:bg-accent"
-      onClick={() => handleSort(column)}
-    >
-      {children}
-      <ArrowUpDown className="ml-2 h-4 w-4" />
-    </Button>
-  );
 
   if (loading && tenants.length === 0) {
     return (
@@ -124,46 +117,128 @@ export function TenantsTable() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Input
-          placeholder="Search tenants..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="max-w-sm"
-        />
-        <Select
-          value={pagination.limit.toString()}
-          onValueChange={(value) =>
-            setPagination((prev) => ({ ...prev, limit: parseInt(value), page: 1 }))
-          }
-        >
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Items per page" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="10">10 per page</SelectItem>
-            <SelectItem value="20">20 per page</SelectItem>
-            <SelectItem value="50">50 per page</SelectItem>
-            <SelectItem value="100">100 per page</SelectItem>
-          </SelectContent>
-        </Select>
+    <div>
+      {/* Control bar: document count, per-page selector, filter input */}
+      <div className="flex items-center justify-between gap-4 px-4 py-3">
+        {/* Left: Tenant count */}
+        <div className="text-sm text-muted-foreground">
+          {pagination.total.toLocaleString()} tenant{pagination.total !== 1 ? "s" : ""} found
+          {pagination.totalPages > 1 && (
+            <span className="ml-2">
+              | page {pagination.page} of {pagination.totalPages}
+            </span>
+          )}
+        </div>
+
+        {/* Right: Per-page selector and filter input */}
+        <div className="flex items-center gap-4">
+          {/* Per-page selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground whitespace-nowrap">Rows per page</span>
+            <Select
+              value={pageSize.toString()}
+              onValueChange={(value) => setPageSize(parseInt(value))}
+              disabled={loading}
+            >
+              <SelectTrigger className="h-8 w-[85px] bg-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="25">25</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Filter input */}
+          <div className="relative">
+            <Input
+              placeholder="Search tenants..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-8 max-w-sm bg-white pr-8"
+            />
+            {loading && (
+              <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+            )}
+          </div>
+
+          {/* Pagination buttons */}
+          {pagination.total > pagination.limit && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setPagination((prev) => ({ ...prev, page: Math.max(1, prev.page - 1) }))
+                }
+                disabled={pagination.page === 1 || loading}
+                className="h-8"
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setPagination((prev) => ({
+                    ...prev,
+                    page: Math.min(prev.totalPages, prev.page + 1),
+                  }))
+                }
+                disabled={pagination.page >= pagination.totalPages || loading}
+                className="h-8"
+              >
+                Next
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="rounded-md border">
-        <Table>
+      {/* Table with white background */}
+      <div className="mt-0">
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
           <TableHeader>
             <TableRow>
               <TableHead>
-                <SortButton column="slug">Slug</SortButton>
+                <SortableTableHeader
+                  column="slug"
+                  currentSortBy={sortBy}
+                  currentSortOrder={sortOrder}
+                  onSort={handleSort}
+                >
+                  Slug
+                </SortableTableHeader>
               </TableHead>
               <TableHead>
-                <SortButton column="name">Name</SortButton>
+                <SortableTableHeader
+                  column="name"
+                  currentSortBy={sortBy}
+                  currentSortOrder={sortOrder}
+                  onSort={handleSort}
+                >
+                  Name
+                </SortableTableHeader>
               </TableHead>
               <TableHead>Members</TableHead>
               <TableHead>Documents</TableHead>
               <TableHead>
-                <SortButton column="createdAt">Created</SortButton>
+                <SortableTableHeader
+                  column="createdAt"
+                  currentSortBy={sortBy}
+                  currentSortOrder={sortOrder}
+                  onSort={handleSort}
+                >
+                  Created
+                </SortableTableHeader>
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -179,7 +254,7 @@ export function TenantsTable() {
                 <TableRow
                   key={tenant.id}
                   className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => router.push(`/dashboard/tenants/${tenant.slug}`)}
+                  onClick={() => router.push(`/tenants/${tenant.slug}`)}
                 >
                   <TableCell className="font-medium">{tenant.slug}</TableCell>
                   <TableCell>{tenant.name}</TableCell>
@@ -193,15 +268,14 @@ export function TenantsTable() {
             )}
           </TableBody>
         </Table>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          Showing {tenants.length === 0 ? 0 : (pagination.page - 1) * pagination.limit + 1} to{" "}
-          {Math.min(pagination.page * pagination.limit, pagination.total)} of{" "}
-          {pagination.total} tenants
-        </div>
-        <div className="flex items-center gap-2">
+      {/* Pagination buttons */}
+      {pagination.total > pagination.limit && (
+        <div className="flex items-center justify-end gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -209,8 +283,9 @@ export function TenantsTable() {
               setPagination((prev) => ({ ...prev, page: Math.max(1, prev.page - 1) }))
             }
             disabled={pagination.page === 1 || loading}
+            className="h-8"
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="h-4 w-4 mr-1" />
             Previous
           </Button>
           <Button
@@ -223,12 +298,13 @@ export function TenantsTable() {
               }))
             }
             disabled={pagination.page >= pagination.totalPages || loading}
+            className="h-8"
           >
             Next
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-4 w-4 ml-1" />
           </Button>
         </div>
-      </div>
+      )}
     </div>
   );
 }

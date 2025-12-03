@@ -12,6 +12,8 @@ import {
   Building2,
   Users,
   FileText,
+  FileCheck,
+  Database,
 } from "lucide-react";
 
 type NavItem = {
@@ -27,23 +29,21 @@ type NavSection = {
 };
 
 const sectionColors: Record<string, string> = {
-  Main: "text-[#A78BFA]",
-  Search: "text-[#34D399]",
-  System: "text-[#60A5FA]",
+  Admin: "text-[#A78BFA]",
+  Documents: "text-[#34D399]",
   Assignment: "text-[#F59E0B]",
 };
 
 const bulletColors: Record<string, string> = {
-  Main: "bg-[#A78BFA]",
-  Search: "bg-[#34D399]",
-  System: "bg-[#60A5FA]",
+  Admin: "bg-[#A78BFA]",
+  Documents: "bg-[#34D399]",
   Assignment: "bg-[#F59E0B]",
 };
 
 // Base navigation sections - will be filtered based on user role
 const baseNavSections: NavSection[] = [
   {
-    label: "Main",
+    label: "Admin",
     items: [
       {
         label: "Dashboard",
@@ -52,26 +52,38 @@ const baseNavSections: NavSection[] = [
         disabled: false,
       },
       {
-        label: "Documents",
-        href: "/dashboard/documents",
-        icon: Search,
-        disabled: false,
-      },
-    ],
-  },
-  {
-    label: "System",
-    items: [
-      {
         label: "Tenants",
-        href: "/dashboard/tenants",
+        href: "/tenants",
         icon: Building2,
         disabled: false,
       },
       {
         label: "Users",
-        href: "/dashboard/users",
+        href: "/users",
         icon: Users,
+        disabled: false,
+      },
+    ],
+  },
+  {
+    label: "Documents",
+    items: [
+      {
+        label: "Search",
+        href: "/documents",
+        icon: Search,
+        disabled: false,
+      },
+      {
+        label: "Manifest",
+        href: "/documents/manifest",
+        icon: FileCheck,
+        disabled: false,
+      },
+      {
+        label: "Cache",
+        href: "/documents/cache",
+        icon: Database,
         disabled: false,
       },
     ],
@@ -81,7 +93,7 @@ const baseNavSections: NavSection[] = [
     items: [
       {
         label: "Deliverables",
-        href: "/dashboard/assignment",
+        href: "/assignment",
         icon: FileText,
         disabled: false,
       },
@@ -116,7 +128,7 @@ export function AdminSidebar({ user }: AdminSidebarProps) {
     ? baseNavSections
     : [
         {
-          label: "Main",
+          label: "Admin",
           items: [
             {
               label: "Dashboard",
