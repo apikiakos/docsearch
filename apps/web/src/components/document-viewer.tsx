@@ -101,14 +101,20 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
   
   // For S3 files, we'll fetch a presigned URL (handled in useEffect)
   // Check for both "s3" (from s3_producer) and "s3_upload" (from uploads_producer)
-  const isS3Source = (source === "s3" || source === "s3_upload") && s3Key && tenantId;
+  const sourceMatches = source === "s3" || source === "s3_upload";
+  const hasS3Key = !!s3Key;
+  const hasTenantId = !!tenantId;
+  const isS3Source = sourceMatches && hasS3Key && hasTenantId;
   
   // Debug S3 key extraction
   if (source === "s3" || source === "s3_upload") {
     console.log("[DocumentViewer] S3 Source Detection:", {
       source,
+      sourceMatches,
       s3Key,
+      hasS3Key,
       tenantId,
+      hasTenantId,
       isS3Source,
       hasExtras: !!extras,
       extrasS3Key: extras?.s3_key,
@@ -116,6 +122,14 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
       metadataS3Key: metadata?.s3_key,
       originalUrl,
       sourceUrl,
+      conditionBreakdown: {
+        "source === 's3'": source === "s3",
+        "source === 's3_upload'": source === "s3_upload",
+        "sourceMatches": sourceMatches,
+        "hasS3Key": hasS3Key,
+        "hasTenantId": hasTenantId,
+        "final": isS3Source,
+      },
     });
   }
   
