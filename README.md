@@ -520,7 +520,7 @@ ADMIN_TENANTS_LIST="s3-tenant-1,s3-tenant-2,gutenberg"
 - **RabbitMQ**: Use managed RabbitMQ service or cluster
 - **Environment Variables**: Store securely (use secrets management)
 - **HTTPS**: Ensure SSL/TLS is configured
-- **CORS**: Configure CORS for your production domain (see `docs/S3_CORS_SETUP.md`)
+- **CORS**: Configure CORS for your production domain (see `infrastructure/S3_CORS_SETUP.md`)
 - **Monitoring**: Set up logging and monitoring
 - **Backups**: Configure database and Elasticsearch backups
 
@@ -691,7 +691,7 @@ See [infrastructure/README.md](./infrastructure/README.md) for detailed document
 
 ### CORS Configuration
 
-For S3 direct uploads from the web interface, CORS must be configured. See [docs/S3_CORS_SETUP.md](./docs/S3_CORS_SETUP.md) for details.
+For S3 direct uploads from the web interface, CORS must be configured. See [infrastructure/S3_CORS_SETUP.md](./infrastructure/S3_CORS_SETUP.md) for details.
 
 ## Troubleshooting
 
@@ -812,4 +812,4 @@ pnpm start
 - [apps/web/README.md](./apps/web/README.md) - Web application API documentation
 - [workers/python/README.md](./workers/python/README.md) - Python workers documentation
 - [infrastructure/README.md](./infrastructure/README.md) - Infrastructure setup
-- [docs/S3_CORS_SETUP.md](./docs/S3_CORS_SETUP.md) - S3 CORS configuration
+- [infrastructure/S3_CORS_SETUP.md](./infrastructure/S3_CORS_SETUP.md) - S3 CORS configuration

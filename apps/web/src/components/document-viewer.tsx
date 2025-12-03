@@ -317,12 +317,12 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
         const bookTitle = (extras?.title as string | undefined) || (metadata?.title as string | undefined) || filename || "Gutenberg Book";
         const bookAuthor = extras?.author as string | undefined;
         container.innerHTML = `
-          <div style="padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.8; max-width: 1200px; margin: 0 auto; background: #fff;">
+          <div style="padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.8; width: 100%; box-sizing: border-box; background: #fff;">
             <div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 2px solid #e5e7eb;">
               <h1 style="font-size: 2em; margin: 0 0 10px 0; color: #111827;">${escapeHtml(bookTitle)}</h1>
               ${bookAuthor ? `<p style="font-size: 1.1em; color: #6b7280; margin: 0;">by ${escapeHtml(bookAuthor)}</p>` : ""}
             </div>
-            <div style="white-space: pre-wrap; word-wrap: break-word; font-size: 16px; color: #374151; line-height: 1.8;">${escapeHtml(content)}</div>
+            <div style="white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word; font-size: 16px; color: #374151; line-height: 1.8; width: 100%; box-sizing: border-box;">${escapeHtml(content)}</div>
           </div>
         `;
         setViewerReady(true);
@@ -425,38 +425,38 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
       // DOCX: If no URL available, show extracted text content
       // If URL is available, it will be handled by the iframe with Office Online Viewer
       container.innerHTML = `
-        <div style="padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto;">
+        <div style="padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; width: 100%; box-sizing: border-box;">
           <div style="background: #f0f9ff; border-left: 4px solid #0ea5e9; padding: 12px; margin-bottom: 20px; border-radius: 4px;">
             <strong>DOCX Document</strong>
             <p style="margin: 8px 0 0 0; font-size: 0.9em; color: #64748b;">
               This is the extracted text content from the DOCX file. For full formatting, please download the original file.
             </p>
           </div>
-          <div style="white-space: pre-wrap; word-wrap: break-word;">${content}</div>
+          <div style="white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word; width: 100%; box-sizing: border-box;">${content}</div>
         </div>
       `;
       setTimeout(() => setViewerReady(true), 0);
     } else if (["TXT", "MD", "MARKDOWN"].includes(fileType)) {
       // Text files: Display with formatting (if not using iframe)
       container.innerHTML = `
-        <div style="padding: 20px; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; line-height: 1.6; max-width: 800px; margin: 0 auto; background: #fff;">
-          <pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0; font-size: 14px; color: #333;">${escapeHtml(content)}</pre>
+        <div style="padding: 20px; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; line-height: 1.6; width: 100%; box-sizing: border-box; background: #fff;">
+          <pre style="white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 14px; color: #333; width: 100%; box-sizing: border-box; overflow-x: auto;">${escapeHtml(content)}</pre>
         </div>
       `;
       setTimeout(() => setViewerReady(true), 0);
     } else if (["JS", "TS", "JSX", "TSX", "JSON", "XML", "CSS", "YAML"].includes(fileType)) {
       // Code files: Display with syntax highlighting (basic)
       container.innerHTML = `
-        <div style="padding: 20px; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; line-height: 1.6; max-width: 1200px; margin: 0 auto; background: #1e1e1e; color: #d4d4d4;">
-          <pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0; font-size: 14px; overflow-x: auto;"><code>${escapeHtml(content)}</code></pre>
+        <div style="padding: 20px; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; line-height: 1.6; width: 100%; box-sizing: border-box; background: #1e1e1e; color: #d4d4d4;">
+          <pre style="white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 14px; overflow-x: auto; width: 100%; box-sizing: border-box;"><code>${escapeHtml(content)}</code></pre>
         </div>
       `;
       setTimeout(() => setViewerReady(true), 0);
     } else {
       // Default: Show as formatted text
       container.innerHTML = `
-        <div style="padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto;">
-          <div style="white-space: pre-wrap; word-wrap: break-word;">${escapeHtml(content)}</div>
+        <div style="padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; width: 100%; box-sizing: border-box;">
+          <div style="white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word; width: 100%; box-sizing: border-box;">${escapeHtml(content)}</div>
         </div>
       `;
       setTimeout(() => setViewerReady(true), 0);
@@ -612,7 +612,7 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
                 />
               )}
               {!(fileType === "PDF" || fileType === "HTML" || fileType === "HTM" || useIframeForRemote || useLocalFileUrl || (isS3Source && s3PresignedUrl) || useDocxViewer) && (
-                <div ref={containerRef} className="w-full" />
+                <div ref={containerRef} className="w-full overflow-auto" style={{ minHeight: "400px" }} />
               )}
             </>
           )}

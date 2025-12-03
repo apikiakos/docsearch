@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowUpDown, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowUpDown, Loader2, ChevronLeft, ChevronRight, AlertCircle, RefreshCw } from "lucide-react";
 import { SortableTableHeader } from "@/components/sortable-table-header";
 import { TablePagination } from "@/components/table-pagination";
 import { DocumentActions } from "@/components/document-actions";
@@ -60,6 +60,7 @@ export function ManifestTable() {
     totalPages: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("lastIndexedAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc"); // Most recent first
@@ -71,6 +72,7 @@ export function ManifestTable() {
 
   const fetchEntries = async () => {
     setLoading(true);
+    setError(null);
     try {
       const params = new URLSearchParams({
         page: pagination.page.toString(),
@@ -81,13 +83,25 @@ export function ManifestTable() {
       });
 
       const response = await fetch(`/api/manifest?${params}`);
-      if (!response.ok) throw new Error("Failed to fetch manifest entries");
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}: ${response.statusText}` }));
+        throw new Error(errorData.error || `Failed to fetch manifest entries: ${response.status} ${response.statusText}`);
+      }
 
       const data = await response.json();
+      
+      if (!data || typeof data !== 'object') {
+        throw new Error("Invalid response format from API");
+      }
+      
       setEntries(data.entries || []);
       setPagination(data.pagination || pagination);
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to fetch manifest entries";
       console.error("Error fetching manifest entries:", error);
+      setError(errorMessage);
+      setEntries([]);
     } finally {
       setLoading(false);
     }
@@ -141,11 +155,29 @@ export function ManifestTable() {
     return path.split("/").pop() || path;
   };
 
-  if (loading && entries.length === 0) {
+  if (loading && entries.length === 0 && !error) {
     return (
       <div className="flex items-center justify-center py-8">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <AlertCircle className="h-8 w-8 text-destructive mb-4" />
+            <h3 className="text-lg font-semibold mb-2">Error Loading Manifest</h3>
+            <p className="text-sm text-muted-foreground mb-4">{error}</p>
+            <Button onClick={() => fetchEntries()} variant="outline">
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
