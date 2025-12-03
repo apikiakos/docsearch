@@ -6,11 +6,12 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
+import { Loader2, Download } from "lucide-react";
 import { DocumentViewer } from "@/components/document-viewer";
 import { getFileTypeInfo, normalizeFileType } from "@/lib/file-types";
 import { JsonHighlight } from "@/components/json-highlight";
 import { DocumentActions } from "@/components/document-actions";
+import { useToast } from "@/hooks/use-toast";
 
 type DocumentData = {
   id: string;
@@ -33,6 +34,8 @@ export default function DocumentDetailPage() {
   const [document, setDocument] = useState<DocumentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     const fetchDocument = async () => {
@@ -87,6 +90,82 @@ export default function DocumentDetailPage() {
     }
   }, [id]);
 
+  const handleDownload = async () => {
+    if (!document) return;
+    
+    setDownloading(true);
+    try {
+      const response = await fetch(`/api/documents/${document.document_id}/download`);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Failed to download document" }));
+        throw new Error(errorData.error || "Failed to download document");
+      }
+
+      // Check content type to determine if it's JSON (S3 presigned URL) or a file
+      const contentType = response.headers.get("content-type");
+      
+      if (contentType?.includes("application/json")) {
+        // S3 files: response contains presigned URL
+        const data = await response.json();
+        
+        if (data.downloadUrl && data.type === "s3") {
+          // Create a temporary anchor to trigger download from presigned URL
+          const a = window.document.createElement("a");
+          a.href = data.downloadUrl;
+          a.download = data.filename || "document";
+          a.target = "_blank"; // Open in new tab as fallback
+          window.document.body.appendChild(a);
+          a.click();
+          window.document.body.removeChild(a);
+
+          toast({
+            title: "Download started",
+            description: `Downloading ${data.filename || "document"}...`,
+          });
+        } else {
+          throw new Error("Invalid download response format");
+        }
+      } else {
+        // Local files: response is the file itself
+        // Get filename from Content-Disposition header or use default
+        const contentDisposition = response.headers.get("Content-Disposition");
+        let filename = "document.txt";
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+          if (filenameMatch) {
+            filename = filenameMatch[1];
+          }
+        }
+
+        // Create blob and download
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = window.document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        window.document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        window.document.body.removeChild(a);
+
+        toast({
+          title: "Download started",
+          description: `Downloading ${filename}...`,
+        });
+      }
+    } catch (error) {
+      console.error("Error downloading document:", error);
+      toast({
+        title: "Failed to download document",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
 
   if (loading) {
     return (
@@ -140,19 +219,39 @@ export default function DocumentDetailPage() {
         ]}
         actions={
           document ? (
-            <DocumentActions
-              documentId={document.document_id}
-              title={document.title}
-              tenantId={document.tenant_id}
-              onDeleted={() => {
-                // Redirect to documents list after successful deletion
-                router.push("/documents");
-              }}
-              onReindexed={() => {
-                // Reload the page after reindexing
-                router.refresh();
-              }}
-            />
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={handleDownload}
+                disabled={downloading}
+                variant="outline"
+                size="sm"
+              >
+                {downloading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Downloading...
+                  </>
+                ) : (
+                  <>
+                    <Download className="mr-2 h-4 w-4" />
+                    Download
+                  </>
+                )}
+              </Button>
+              <DocumentActions
+                documentId={document.document_id}
+                title={document.title}
+                tenantId={document.tenant_id}
+                onDeleted={() => {
+                  // Redirect to documents list after successful deletion
+                  router.push("/documents");
+                }}
+                onReindexed={() => {
+                  // Reload the page after reindexing
+                  router.refresh();
+                }}
+              />
+            </div>
           ) : null
         }
       />

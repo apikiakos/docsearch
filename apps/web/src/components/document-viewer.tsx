@@ -63,6 +63,7 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
   // 1. extras.s3_key (new structure)
   // 2. metadata.s3_key (legacy structure)
   // 3. Parse from originalUrl if it's an S3 URL (fallback)
+  // 4. Parse from source_url if it's an S3 URL
   let s3Key = extras?.s3_key as string | undefined;
   if (!s3Key && metadata) {
     s3Key = metadata.s3_key as string | undefined;
@@ -76,9 +77,25 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
       s3Key = urlMatch[1];
     }
   }
+  // Also check source_url for S3 URLs (important for uploaded documents)
+  if (!s3Key && sourceUrl && sourceUrl.startsWith("s3://")) {
+    const urlMatch = sourceUrl.match(/^s3:\/\/[^\/]+\/(.+)$/);
+    if (urlMatch && urlMatch[1]) {
+      s3Key = urlMatch[1];
+    }
+  }
+  // For uploaded documents, source_url might contain the S3 key path directly
+  // Check if source_url looks like an S3 key path (e.g., "uploads/s3-tenant-1/123456_file.pdf")
+  if (!s3Key && sourceUrl && !sourceUrl.startsWith("http") && !sourceUrl.startsWith("s3://") && sourceUrl.includes("/")) {
+    // If it contains tenantId and looks like a path, it might be the S3 key
+    if (tenantId && (sourceUrl.includes(tenantId) || sourceUrl.startsWith("uploads/"))) {
+      s3Key = sourceUrl;
+    }
+  }
   
   // For S3 files, we'll fetch a presigned URL (handled in useEffect)
-  const isS3Source = source === "s3" && s3Key && tenantId;
+  // Check for both "s3" (from s3_producer) and "s3_upload" (from uploads_producer)
+  const isS3Source = (source === "s3" || source === "s3_upload") && s3Key && tenantId;
   
   // For local files, construct API route URL
   // Use source_url if available, otherwise fall back to originalUrl for local files
@@ -162,7 +179,7 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
   
   // Fetch presigned URL for S3 files
   useEffect(() => {
-    if (isS3Source && s3Key && tenantId && !s3PresignedUrl) {
+    if (isS3Source && s3Key && tenantId && !s3PresignedUrl && !error) {
       const fetchPresignedUrl = async () => {
         try {
           console.log("[DocumentViewer] Fetching presigned URL for S3:", { s3Key, tenantId });
@@ -173,19 +190,36 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
             const data = await response.json();
             console.log("[DocumentViewer] Presigned URL received:", data.url.substring(0, 100) + "...");
             setS3PresignedUrl(data.url);
+            setError(null); // Clear any previous errors
           } else {
-            const errorData = await response.json();
+            const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
             console.error("[DocumentViewer] Failed to get presigned URL:", errorData);
             setError(errorData.error || "Failed to generate S3 presigned URL");
+            // Still set viewerReady to show error message
+            setViewerReady(true);
           }
         } catch (err) {
           console.error("[DocumentViewer] Error fetching presigned URL:", err);
-          setError("Failed to generate S3 presigned URL");
+          setError(err instanceof Error ? err.message : "Failed to generate S3 presigned URL");
+          // Still set viewerReady to show error message
+          setViewerReady(true);
         }
       };
       fetchPresignedUrl();
+    } else if (isS3Source && !s3Key) {
+      // S3 source but no S3 key found - this is an error
+      console.error("[DocumentViewer] S3 source detected but no S3 key found in metadata:", {
+        source,
+        tenantId,
+        originalUrl,
+        sourceUrl,
+        extras,
+        metadataKeys: metadata ? Object.keys(metadata) : [],
+      });
+      setError("S3 key not found in document metadata");
+      setViewerReady(true);
     }
-  }, [isS3Source, s3Key, tenantId, s3PresignedUrl]);
+  }, [isS3Source, s3Key, tenantId, s3PresignedUrl, error, source, originalUrl, sourceUrl, extras, metadata]);
 
   // Debug logging
   console.log("[DocumentViewer] Render:", {
@@ -452,6 +486,9 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
             <div className="absolute inset-0 flex items-center justify-center bg-muted">
               <div className="text-center p-4">
                 <p className="text-sm text-destructive mb-2">{error}</p>
+                {isS3Source && s3Key && (
+                  <p className="text-xs text-muted-foreground mt-2">S3 Key: {s3Key}</p>
+                )}
                 {useLocalFileUrl && localFileUrl && (
                   <p className="text-xs text-muted-foreground">URL: {localFileUrl}</p>
                 )}
@@ -463,7 +500,7 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
             <div ref={containerRef} className="w-full overflow-auto" style={{ minHeight: "600px", maxHeight: "80vh" }} />
           ) : (
             <>
-              {(fileType === "PDF" || fileType === "HTML" || fileType === "HTM" || useIframeForRemote || useLocalFileUrl || (isS3Source && s3PresignedUrl) || useDocxViewer) && (
+              {(fileType === "PDF" || fileType === "HTML" || fileType === "HTM" || useIframeForRemote || useLocalFileUrl || (isS3Source && (s3PresignedUrl || error)) || useDocxViewer) && (
                 <iframe
                   ref={iframeRef}
                   src={
