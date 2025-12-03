@@ -60,11 +60,17 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
   const extras = metadata?.extras as Record<string, unknown> | undefined;
   
   // Extract S3 key from multiple possible locations:
-  // 1. extras.s3_key (new structure)
+  // 1. extras.s3_key (new structure) - PRIORITY: highest
   // 2. metadata.s3_key (legacy structure)
   // 3. Parse from originalUrl if it's an S3 URL (fallback)
   // 4. Parse from source_url if it's an S3 URL
   let s3Key = extras?.s3_key as string | undefined;
+  
+  // Also check if extras is nested in metadata.extras
+  if (!s3Key && metadata?.extras && typeof metadata.extras === "object") {
+    s3Key = (metadata.extras as Record<string, unknown>)?.s3_key as string | undefined;
+  }
+  
   if (!s3Key && metadata) {
     s3Key = metadata.s3_key as string | undefined;
   }
@@ -182,7 +188,13 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
     if (isS3Source && s3Key && tenantId && !s3PresignedUrl && !error) {
       const fetchPresignedUrl = async () => {
         try {
-          console.log("[DocumentViewer] Fetching presigned URL for S3:", { s3Key, tenantId });
+          console.log("[DocumentViewer] Fetching presigned URL for S3:", { 
+            s3Key, 
+            tenantId, 
+            source,
+            s3KeyStartsWithTenant: s3Key.startsWith(`${tenantId}/`),
+            s3KeyStartsWithUploads: s3Key.startsWith(`uploads/${tenantId}/`),
+          });
           const response = await fetch(
             `/api/documents/s3-presigned?s3Key=${encodeURIComponent(s3Key)}&tenantId=${encodeURIComponent(tenantId)}`
           );
@@ -194,6 +206,7 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
           } else {
             const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
             console.error("[DocumentViewer] Failed to get presigned URL:", errorData);
+            console.error("[DocumentViewer] Request details:", { s3Key, tenantId, source });
             setError(errorData.error || "Failed to generate S3 presigned URL");
             // Still set viewerReady to show error message
             setViewerReady(true);
@@ -215,8 +228,17 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
         sourceUrl,
         extras,
         metadataKeys: metadata ? Object.keys(metadata) : [],
+        fullMetadata: metadata,
       });
       setError("S3 key not found in document metadata");
+      setViewerReady(true);
+    } else if ((source === "s3" || source === "s3_upload") && !tenantId) {
+      console.error("[DocumentViewer] S3 source detected but no tenantId found:", {
+        source,
+        metadata,
+        tenantIdFromMetadata: metadata?.tenant_id,
+      });
+      setError("Tenant ID not found in document metadata");
       setViewerReady(true);
     }
   }, [isS3Source, s3Key, tenantId, s3PresignedUrl, error, source, originalUrl, sourceUrl, extras, metadata]);
@@ -240,6 +262,10 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
     s3Key,
     s3PresignedUrl,
     viewerReady,
+    extras,
+    metadataKeys: metadata ? Object.keys(metadata) : [],
+    hasExtras: !!extras,
+    extrasKeys: extras ? Object.keys(extras) : [],
   });
 
   useEffect(() => {
