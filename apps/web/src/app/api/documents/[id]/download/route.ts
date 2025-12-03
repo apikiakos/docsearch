@@ -58,6 +58,7 @@ export async function GET(_request: Request, context: Context) {
       filename = (metadata.filename as string) || "document.txt";
       source = metadata.source as string;
       // If source is not set but tenant is S3, infer it
+      // Check for both "s3" and "s3_upload" sources
       if (!source && tenantSlug.startsWith("s3-")) {
         source = "s3";
       }
@@ -88,8 +89,9 @@ export async function GET(_request: Request, context: Context) {
       
       // Determine source from tenant
       if (tenantSlug.startsWith("s3-")) {
-        source = "s3";
-        // For S3, path IS the S3 key (e.g., "s3-tenant-1/books/file.pdf")
+        // Check if path starts with "uploads/" to determine if it's an uploaded document
+        source = path.startsWith("uploads/") ? "s3_upload" : "s3";
+        // For S3, path IS the S3 key (e.g., "s3-tenant-1/books/file.pdf" or "uploads/s3-tenant-1/...")
         // Store it in extras for later use
         extras = { s3_key: path };
         originalUrl = `s3://${BUCKET_NAME}/${path}`;
@@ -112,7 +114,8 @@ export async function GET(_request: Request, context: Context) {
     await requireTenantAccess(tenantSlug);
 
     // For S3 files, use the same logic as document-viewer.tsx to extract S3 key and generate presigned URL
-    if (source === "s3" || tenantSlug.startsWith("s3-")) {
+    // Check for both "s3" (from s3_producer) and "s3_upload" (from uploads_producer)
+    if (source === "s3" || source === "s3_upload" || tenantSlug.startsWith("s3-")) {
       // Extract S3 key using the exact same logic as document-viewer.tsx
       let s3Key: string | undefined;
       
