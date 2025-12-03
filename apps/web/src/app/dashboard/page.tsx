@@ -5,8 +5,8 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { IndexInfo } from "./tenants/[slug]/index-info";
-import { TenantDocuments } from "./tenants/[slug]/tenant-documents";
+import { IndexInfo } from "@/app/tenants/[slug]/index-info";
+import { TenantDocuments } from "@/app/tenants/[slug]/tenant-documents";
 import { TenantActions } from "@/components/tenant-actions";
 import { AdminDashboardCard } from "@/components/admin-dashboard-card";
 

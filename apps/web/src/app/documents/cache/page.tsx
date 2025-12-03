@@ -19,7 +19,7 @@ export default async function CachePage() {
     <div className="space-y-6">
       <PageHeader
         title="Cache Management"
-        description="View and manage Redis cache entries for search results"
+        subtitle="View and manage Redis cache entries for search results"
         breadcrumbs={[
           { label: "Dashboard", href: "/dashboard" },
           { label: "Documents", href: "/documents" },

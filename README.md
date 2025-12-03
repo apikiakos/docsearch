@@ -2,38 +2,531 @@
 
 A prototype distributed document search service with multi-tenancy support, built for enterprise technical assessment.
 
+## ⚡ Quick Start for Interview/Demo
+
+**IMPORTANT**: You need **3 separate terminal windows** open to run the complete system:
+
+1. **Terminal 1**: Web Server (`pnpm --filter web dev`)
+2. **Terminal 2**: FastAPI Service (`cd workers/python && source venv/bin/activate && python fastapi_service.py`)
+3. **Terminal 3**: Consumer (`cd workers/python && source venv/bin/activate && python consumer.py`)
+
+See the [Quick Start](#quick-start) section below for detailed instructions.
+
+## Table of Contents
+
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Environment Variables](#environment-variables)
+- [Production Deployment](#production-deployment)
+- [Default Users & Passwords](#default-users--passwords)
+- [Architecture Overview](#architecture-overview)
+- [Document Ingestion Pipeline](#document-ingestion-pipeline)
+- [API Documentation](#api-documentation)
+- [Infrastructure](#infrastructure)
+- [Troubleshooting](#troubleshooting)
+
 ## Prerequisites
 
-- **Node.js**: v20.19.6 (required - use `nvm use` or `fnm use` to switch versions)
-- **pnpm**: >=9.7.0
-- **Docker**: For running PostgreSQL, Elasticsearch, Redis, and RabbitMQ
+Before you begin, ensure you have:
 
-The project includes `.nvmrc` and `.node-version` files for automatic version switching.
+- **Node.js v20.19.6** (required - see installation below)
+- **pnpm >= 9.7.0** - Package manager
+- **Docker & Docker Compose** - For running PostgreSQL, Elasticsearch, Redis, and RabbitMQ
+- **Python 3.11+** - For document ingestion workers
+- **Git** - To clone the repository
 
-## Quick Start
+### Installing Node.js v20.19.6
 
-### 1. Start Services
+The project requires **Node.js v20.19.6** exactly. The project includes `.nvmrc` and `.node-version` files for automatic version switching.
+
+#### Option A: Using NVM (Node Version Manager) - Recommended
+
+1. **Install NVM** (if not already installed):
+   ```bash
+   # macOS/Linux
+   curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+   
+   # Or on macOS with Homebrew
+   brew install nvm
+   ```
+
+2. **Install and use Node.js v20.19.6**:
+   ```bash
+   nvm install 20.19.6
+   nvm use 20.19.6
+   ```
+
+3. **Verify installation**:
+   ```bash
+   node --version  # Should output: v20.19.6
+   ```
+
+#### Option B: Using Native Node.js Installation
+
+1. **Download Node.js v20.19.6** from [nodejs.org](https://nodejs.org/)
+   - Direct download: https://nodejs.org/dist/v20.19.6/
+
+2. **Install** following the installer instructions for your OS
+
+3. **Verify installation**:
+   ```bash
+   node --version  # Should output: v20.19.6
+   ```
+
+### Install pnpm
+
+```bash
+npm install -g pnpm@latest
+pnpm --version  # Should be >= 9.7.0
+```
+
+## Installation
+
+### Step 1: Clone and Setup Project
+
+1. **Clone the repository**:
+   ```bash
+   git clone <repository-url>
+   cd distributed-docsearch-prototype
+   ```
+
+2. **Install dependencies**:
+   ```bash
+   pnpm install
+   ```
+
+### Step 2: Configure Environment Variables
+
+1. **Create `.env` file** in the project root (not in `apps/web/`):
+   ```bash
+   cp .env.example .env  # If .env.example exists
+   ```
+
+2. **Edit `.env`** with your configuration. The minimum required variables are:
+
+   ```env
+   # Database
+   DATABASE_URL="postgresql://postgres:postgres@localhost:5432/docsearch?schema=public"
+
+   # NextAuth
+   NEXTAUTH_URL="http://localhost:3000"
+   NEXTAUTH_URL_INTERNAL="http://localhost:3000"
+   # For production, use: NEXTAUTH_URL="https://your-production-domain.com"
+
+   # Elasticsearch
+   ELASTICSEARCH_URL="http://localhost:9200"
+
+   # Redis
+   REDIS_URL="redis://localhost:6379"
+
+   # RabbitMQ (for Python workers)
+   RABBITMQ_URL="amqp://guest:guest@localhost:5672/%2F"
+   RABBITMQ_QUEUE_NAME="doc_ingest"
+
+   # Admin Interface Configuration (optional)
+   # Comma-separated list of tenant slugs to display in admin interface
+   ADMIN_TENANTS_LIST="s3-tenant-1,s3-tenant-2,gutenberg"
+   ```
+
+   For AWS S3 features (required for S3 producers):
+   ```env
+   AWS_ACCESS_KEY_ID="your-access-key-id"
+   AWS_SECRET_ACCESS_KEY="your-secret-access-key"
+   AWS_DEFAULT_REGION="eu-west-1"
+   AWS_S3_BUCKET="document-search-tenants"
+   ```
+
+   **Note**: 
+   - Next.js automatically loads `.env` from the project root (configured in `next.config.ts`)
+   - Prisma config files are updated to load from the root `.env` as well
+   - Python scripts load from the root `.env` file
+
+### Step 3: Start Docker Services
+
+Start all required services (PostgreSQL, Elasticsearch, Redis, RabbitMQ):
 
 ```bash
 docker compose up -d
 ```
 
-### 2. Setup Database
+This starts:
+- **PostgreSQL** on port `5432`
+- **Elasticsearch** on port `9200`
+- **Redis** on port `6379`
+- **RabbitMQ** on ports `5672` (AMQP) and `15672` (Management UI)
+
+**Verify services are running**:
+```bash
+docker compose ps
+```
+
+You should see all services with status "Up".
+
+**Optional**: Access RabbitMQ Management UI at http://localhost:15672 (username: `guest`, password: `guest`)
+
+### Step 4: Initialize Database
+
+1. **Generate Prisma client**:
+   ```bash
+   pnpm --filter web db:generate
+   ```
+
+2. **Push database schema** (creates tables):
+   ```bash
+   pnpm --filter web db:push
+   ```
+
+   This creates all necessary tables including:
+   - `users` - User accounts
+   - `tenants` - Tenant organizations
+   - `memberships` - User-tenant relationships
+   - `file_manifest` - Document change tracking
+
+3. **Seed the database** (creates initial users and tenants):
+   ```bash
+   pnpm --filter web db:seed
+   ```
+
+   This creates:
+   - **3 Tenants**: `s3-tenant-1`, `s3-tenant-2`, `gutenberg`
+   - **1 Admin User**: `admin@example.com` (password: `admin123`) with access to all tenants
+   - **3 Tenant Users**:
+     - `s3-tenant-1@example.com` (password: `user123`) → `s3-tenant-1` tenant
+     - `s3-tenant-2@example.com` (password: `user123`) → `s3-tenant-2` tenant
+     - `gutenberg@example.com` (password: `user123`) → `gutenberg` tenant
+
+### Step 5: Setup Python Workers (Optional)
+
+The system uses Python workers to ingest documents from various sources. If you plan to use document ingestion:
+
+1. **Navigate to Python workers directory**:
+   ```bash
+   cd workers/python
+   ```
+
+2. **Create virtual environment**:
+   ```bash
+   python3 -m venv venv
+   ```
+
+3. **Activate virtual environment**:
+   ```bash
+   # macOS/Linux
+   source venv/bin/activate
+   
+   # Windows
+   venv\Scripts\activate
+   ```
+
+4. **Install Python dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+5. **Verify setup**:
+   ```bash
+   python test_setup.py
+   ```
+
+   This should verify:
+   - All packages installed correctly
+   - RabbitMQ connection works
+   - Elasticsearch connection works
+   - PostgreSQL connection works
+
+## Quick Start
+
+After completing the installation steps above, you need to start multiple services in **separate terminal windows/tabs**. Here's the complete setup:
+
+### Required Terminal Windows
+
+You need **3 terminal windows** open to run the complete system:
+
+#### Terminal 1: Web Server (Required)
+
+**Purpose**: Runs the Next.js web application
 
 ```bash
 # From project root
-pnpm --filter web db:generate
-pnpm --filter web db:push
-pnpm --filter web db:seed
+pnpm --filter web dev
 ```
 
-### 3. Start Web Server
+**What you'll see**:
+```
+▲ Next.js 16.0.5
+- Local:        http://localhost:3000
+```
 
+**Keep this terminal open** - The web application will be available at **http://localhost:3000**
+
+---
+
+#### Terminal 2: FastAPI Service (Required for Document Indexing)
+
+**Purpose**: Provides HTTP endpoints for triggering document producers from the web UI. **This is required if you want to use the "Run Indexing" buttons in the admin interface.**
+
+```bash
+# Navigate to Python workers directory
+cd workers/python
+
+# Activate virtual environment
+source venv/bin/activate  # On macOS/Linux
+# OR on Windows: venv\Scripts\activate
+
+# Start FastAPI service
+python fastapi_service.py
+```
+
+**What you'll see**:
+```
+INFO:     Started server process
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000
+```
+
+**Keep this terminal open** - The FastAPI service will be available at **http://localhost:8000**
+
+**Important**: Without this service running, the "Run Indexing" buttons in the web UI will not work.
+
+---
+
+#### Terminal 3: Consumer (Required for Document Processing)
+
+**Purpose**: Processes documents from the RabbitMQ queue, extracts text, chunks content, and indexes to Elasticsearch.
+
+```bash
+# Navigate to Python workers directory
+cd workers/python
+
+# Activate virtual environment (if not already activated)
+source venv/bin/activate  # On macOS/Linux
+# OR on Windows: venv\Scripts\activate
+
+# Start consumer
+python consumer.py
+```
+
+**What you'll see**:
+```
+[consumer] Waiting for messages. Press Ctrl+C to exit.
+```
+
+**Keep this terminal open** - The consumer will process documents as they're enqueued by producers.
+
+**Important**: Without this service running, documents will be queued but never indexed into Elasticsearch.
+
+---
+
+### Complete Terminal Setup Summary
+
+For a **fully functional system**, you need these **3 terminals** running simultaneously:
+
+| Terminal | Service | Command | Required? |
+|----------|---------|---------|-----------|
+| **Terminal 1** | Web Server | `pnpm --filter web dev` | ✅ **Yes** |
+| **Terminal 2** | FastAPI Service | `cd workers/python && source venv/bin/activate && python fastapi_service.py` | ✅ **Yes** (for UI indexing) |
+| **Terminal 3** | Consumer | `cd workers/python && source venv/bin/activate && python consumer.py` | ✅ **Yes** (for document processing) |
+
+### Quick Start Commands (Copy & Paste)
+
+**Terminal 1 - Web Server**:
 ```bash
 pnpm --filter web dev
 ```
 
-Visit `http://localhost:3000` to access the application.
+**Terminal 2 - FastAPI Service**:
+```bash
+cd workers/python
+source venv/bin/activate
+python fastapi_service.py
+```
+
+**Terminal 3 - Consumer**:
+```bash
+cd workers/python
+source venv/bin/activate
+python consumer.py
+```
+
+### What Each Service Does
+
+1. **Web Server** (Terminal 1): 
+   - Serves the Next.js application
+   - Handles user authentication
+   - Provides search interface
+   - Displays documents and tenant management
+
+2. **FastAPI Service** (Terminal 2):
+   - Receives requests from web UI to trigger document producers
+   - Runs producers in the background (Gutenberg, S3, Uploads)
+   - Enqueues documents to RabbitMQ for processing
+
+3. **Consumer** (Terminal 3):
+   - Listens to RabbitMQ queue
+   - Processes queued documents
+   - Extracts text from files (PDF, DOCX, HTML, etc.)
+   - Chunks content and indexes to Elasticsearch
+   - Updates manifest with indexing status
+
+### Testing the Setup
+
+1. **Open 3 separate terminal windows** (not tabs - separate windows are easier to monitor)
+2. **Start Terminal 1** (Web Server):
+   ```bash
+   pnpm --filter web dev
+   ```
+   Wait until you see: `▲ Next.js 16.0.5 - Local: http://localhost:3000`
+
+3. **Start Terminal 2** (FastAPI Service):
+   ```bash
+   cd workers/python
+   source venv/bin/activate
+   python fastapi_service.py
+   ```
+   Wait until you see: `INFO: Uvicorn running on http://0.0.0.0:8000`
+
+4. **Start Terminal 3** (Consumer):
+   ```bash
+   cd workers/python
+   source venv/bin/activate
+   python consumer.py
+   ```
+   Wait until you see: `[consumer] Waiting for messages. Press Ctrl+C to exit.`
+
+5. **Visit** http://localhost:3000 in your browser
+6. **Login** with `admin@example.com` / `admin123`
+7. **Navigate** to a tenant page (e.g., `/tenants/gutenberg`)
+8. **Click "Run Indexing"** - This should trigger the producer via FastAPI
+9. **Check Terminal 2** - You should see FastAPI processing the request
+10. **Check Terminal 3** - You should see the consumer processing messages
+11. **Check the web UI** - Documents should appear after processing
+
+### Troubleshooting Terminal Setup
+
+**If "Run Indexing" button doesn't work:**
+- Make sure Terminal 2 (FastAPI) is running
+- Check Terminal 2 for error messages
+- Verify FastAPI is accessible: `curl http://localhost:8000/health`
+
+**If documents don't appear after indexing:**
+- Make sure Terminal 3 (Consumer) is running
+- Check Terminal 3 for error messages
+- Verify RabbitMQ is running: `docker compose ps rabbitmq`
+
+### Optional: Manual Producers
+
+You can also run producers manually (instead of using the UI) in additional terminals:
+
+**Gutenberg Producer** (Terminal 4 - Optional):
+```bash
+cd workers/python
+source venv/bin/activate
+python gutenberg_producer.py --fetch-new 50  # Fetch 50 new books
+```
+
+**S3 Producer** (Terminal 5 - Optional):
+```bash
+cd workers/python
+source venv/bin/activate
+python s3_producer.py s3-tenant-1 --fetch-new 100
+```
+
+**Note**: Manual producers are optional if you use the "Run Indexing" buttons in the web UI (which requires FastAPI service running).
+
+## Environment Variables
+
+### Root `.env` (Single File for All Services)
+
+Create a `.env` file in the **project root** (not in `apps/web/`):
+
+```env
+# Database
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/docsearch?schema=public"
+
+# NextAuth
+# For production (public URL)
+NEXTAUTH_URL="https://your-production-domain.com"
+# For development (internal URL - used for callbacks in dev)
+NEXTAUTH_URL_INTERNAL="http://localhost:3000"
+# Alternative: Use AUTH_URL (NextAuth v5 preferred)
+# AUTH_URL="http://localhost:3000"  # for dev
+# AUTH_URL="https://your-production-domain.com"  # for prod
+
+# Elasticsearch
+ELASTICSEARCH_URL="http://localhost:9200"
+
+# Redis
+REDIS_URL="redis://localhost:6379"
+
+# RabbitMQ
+RABBITMQ_URL="amqp://guest:guest@localhost:5672/%2F"
+RABBITMQ_QUEUE_NAME="doc_ingest"
+
+# AWS S3 Configuration (for S3 producers and document uploads)
+AWS_ACCESS_KEY_ID="your-access-key-id"
+AWS_SECRET_ACCESS_KEY="your-secret-access-key"
+AWS_DEFAULT_REGION="eu-west-1"
+AWS_S3_BUCKET="document-search-tenants"
+
+# Admin Interface Configuration (optional)
+# Comma-separated list of tenant slugs to display in admin interface
+# If not set, all tenants are shown
+ADMIN_TENANTS_LIST="s3-tenant-1,s3-tenant-2,gutenberg"
+```
+
+**Note**: 
+- Next.js automatically loads `.env` from the project root (configured in `next.config.ts`)
+- Prisma config files are updated to load from the root `.env` as well
+- Python scripts load from the root `.env` file
+- Use CloudFormation to create the S3 bucket: `./infrastructure/deploy-s3.sh`
+- Make sure your AWS credentials have S3 and CloudFormation permissions
+
+## Production Deployment
+
+### Building for Production
+
+1. **Set production environment variables**:
+   ```env
+   NEXTAUTH_URL="https://your-production-domain.com"
+   DATABASE_URL="postgresql://user:password@production-db:5432/docsearch"
+   ELASTICSEARCH_URL="https://your-elasticsearch-cluster:9200"
+   REDIS_URL="redis://your-redis-instance:6379"
+   ```
+
+2. **Build the application**:
+   ```bash
+   cd apps/web
+   pnpm build
+   ```
+
+   The build script automatically captures git commit hash and date:
+   ```bash
+   GIT_COMMIT_SHA=$(git rev-parse --short HEAD)
+   GIT_COMMIT_DATE=$(git log -1 --format=%ci)
+   ```
+
+3. **Start the production server**:
+   ```bash
+   pnpm start
+   ```
+
+### Production Considerations
+
+- **Database**: Use proper PostgreSQL instance (not Docker for production)
+- **Elasticsearch**: Use managed Elasticsearch service or cluster
+- **Redis**: Use managed Redis service
+- **RabbitMQ**: Use managed RabbitMQ service or cluster
+- **Environment Variables**: Store securely (use secrets management)
+- **HTTPS**: Ensure SSL/TLS is configured
+- **CORS**: Configure CORS for your production domain (see `docs/S3_CORS_SETUP.md`)
+- **Monitoring**: Set up logging and monitoring
+- **Backups**: Configure database and Elasticsearch backups
+
+### Git Version Display
+
+The application displays the deployed git version and commit date in the admin sidebar. This is automatically captured during build and displayed at `/api/version`.
 
 ## Default Users & Passwords
 
@@ -49,64 +542,97 @@ After seeding the database, the following users are available:
 
 Each tenant has a dedicated user:
 
-1. **Gutenberg Tenant**
+1. **S3 Tenant 1**
+   - **Email**: `s3-tenant-1@example.com`
+   - **Password**: `user123`
+   - **Role**: `tenant_user`
+   - **Access**: Only documents in the `s3-tenant-1` tenant
+
+2. **S3 Tenant 2**
+   - **Email**: `s3-tenant-2@example.com`
+   - **Password**: `user123`
+   - **Role**: `tenant_user`
+   - **Access**: Only documents in the `s3-tenant-2` tenant
+
+3. **Gutenberg Tenant**
    - **Email**: `gutenberg@example.com`
    - **Password**: `user123`
    - **Role**: `tenant_user`
    - **Access**: Only documents in the `gutenberg` tenant
 
-2. **GovDocs Tenant**
-   - **Email**: `govdocs@example.com`
-   - **Password**: `user123`
-   - **Role**: `tenant_user`
-   - **Access**: Only documents in the `govdocs` tenant
+## Architecture Overview
 
-3. **Alex Local Tenant**
-   - **Email**: `alex@example.com`
-   - **Password**: `user123`
-   - **Role**: `tenant_user`
-   - **Access**: Only documents in the `alex-local` tenant
+- **Frontend**: Next.js 16 with App Router, shadcn/ui components
+- **Backend**: Next.js API routes
+- **Database**: PostgreSQL (users, tenants, memberships, file_manifest)
+- **Search**: Elasticsearch (index-per-tenant pattern)
+- **Cache**: Redis (search results, rate limiting)
+- **Message Queue**: RabbitMQ (document ingestion pipeline)
+- **Auth**: NextAuth.js v5 (email/password with JWT)
+- **Storage**: AWS S3 (document storage)
 
-## Tenants
+## Document Ingestion Pipeline
 
-The system comes with 3 pre-configured tenants:
+The system uses Python workers to ingest documents from various sources. The ingestion pipeline works as follows:
 
-1. **gutenberg** - Project Gutenberg
-2. **govdocs** - Government Documents
-3. **alex-local** - Alex Local
+```
+[Sources] → [Producers] → [RabbitMQ Queue] → [Consumer] → [Elasticsearch]
+```
 
-Each tenant has its own isolated Elasticsearch index (`docs_{tenant_slug}`) and access is enforced at the API layer.
+### Architecture Overview
 
-## How to Use
+- **Producers**: Discover documents and enqueue them to RabbitMQ
+  - **Gutenberg Producer** (`gutenberg_producer.py`): Fetches books from Project Gutenberg
+  - **S3 Producer** (`s3_producer.py`): Discovers documents from S3 buckets
+  - **Uploads Producer** (`uploads_producer.py`): Processes documents uploaded via UI
 
-### 1. Login
+- **Consumer** (`consumer.py`): Processes queued documents, extracts text, chunks content, and indexes to Elasticsearch
 
-1. Navigate to `http://localhost:3000`
-2. Enter your email and password
-3. Click "Sign In"
+- **Manifest System**: Tracks document state in PostgreSQL to avoid re-indexing unchanged files
 
-### 2. Dashboard
+### How It Works
 
-After logging in, you'll see:
-- **Left Sidebar**: Navigation menu (Dashboard, Search, Documents, Settings)
-- **Top Navigation**: App title and user dropdown menu
-- **Main Content**: Dashboard overview
+1. **Producers** scan for documents (HTTP sources, S3)
+2. **Change Detection**: Producers compare current state with PostgreSQL `file_manifest` table
+3. **Enqueue**: Only new or changed documents are sent to RabbitMQ `doc_ingest` queue
+4. **Consumer** picks up messages from the queue
+5. **Processing**: Consumer extracts text, chunks content (with overlap), and indexes to Elasticsearch
+6. **Manifest Update**: Consumer updates the manifest with indexing status
 
-### 3. User Roles & Access
+### Monitoring
 
-#### Platform Admin (`admin@example.com`)
-- Can search across **all tenants**
-- Can index documents to any tenant
-- Can view all documents regardless of tenant
-- Has access to admin features
+- **RabbitMQ UI**: http://localhost:15672 (guest/guest) - See queue status and messages
+- **Elasticsearch**: `curl http://localhost:9200/_cat/indices` - List all indices
+- **Check document count**: `curl http://localhost:9200/docs_<tenant>/_count`
 
-#### Tenant Users
-- Can only search documents in **their assigned tenant**
-- Can only index documents to **their tenant**
-- Cannot access other tenants' data
-- Tenant isolation is enforced at the API level
+## Project Structure
 
-### 4. Using the API
+```
+├── apps/
+│   └── web/              # Next.js application
+│       ├── src/
+│       │   ├── app/      # App router pages
+│       │   ├── components/ # React components
+│       │   ├── lib/      # Utilities (Prisma, ES, Redis, Auth)
+│       │   └── auth.ts   # NextAuth configuration
+│       └── prisma/       # Database schema and migrations
+├── workers/
+│   └── python/           # Python document ingestion workers
+│       ├── consumer.py   # Document processing consumer
+│       ├── gutenberg_producer.py
+│       ├── s3_producer.py
+│       └── fastapi_service.py
+├── infrastructure/       # CloudFormation templates
+├── packages/
+│   └── core/             # Shared types
+└── docker-compose.yml    # Local development services
+```
+
+## API Documentation
+
+See [apps/web/README.md](./apps/web/README.md) for detailed API documentation.
+
+### Using the API
 
 All API endpoints require authentication. Include your session cookie or use the NextAuth session.
 
@@ -147,84 +673,6 @@ curl -X DELETE "http://localhost:3000/api/documents/DOCUMENT_ID" \
   -H "Cookie: next-auth.session-token=YOUR_SESSION_TOKEN"
 ```
 
-### 5. Testing Tenant Isolation
-
-1. **Login as tenant user** (e.g., `gutenberg@example.com`)
-2. **Try to search another tenant** (e.g., `tenant=govdocs`)
-   - You'll get a `403 Forbidden` error
-3. **Login as admin** (`admin@example.com`)
-4. **Search any tenant** - Works for all tenants
-
-## Architecture Overview
-
-- **Frontend**: Next.js 16 with App Router, shadcn/ui components
-- **Backend**: Next.js API routes
-- **Database**: PostgreSQL (users, tenants, memberships)
-- **Search**: Elasticsearch (index-per-tenant pattern)
-- **Cache**: Redis (search results, rate limiting)
-- **Auth**: NextAuth.js v5 (email/password with JWT)
-
-## Project Structure
-
-```
-├── apps/
-│   └── web/              # Next.js application
-│       ├── src/
-│       │   ├── app/      # App router pages
-│       │   ├── components/ # React components
-│       │   ├── lib/      # Utilities (Prisma, ES, Redis, Auth)
-│       │   └── auth.ts   # NextAuth configuration
-│       └── prisma/       # Database schema and migrations
-├── packages/
-│   └── core/             # Shared types
-└── docker-compose.yml    # Local development services
-```
-
-## Environment Variables
-
-### Root `.env` (Single File for All Services)
-
-Create a `.env` file in the **project root** (not in `apps/web/`):
-
-```env
-# Database
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/docsearch?schema=public"
-
-# NextAuth
-# For production (public URL)
-NEXTAUTH_URL="https://your-production-domain.com"
-# For development (internal URL - used for callbacks in dev)
-NEXTAUTH_URL_INTERNAL="http://localhost:3000"
-# Alternative: Use AUTH_URL (NextAuth v5 preferred)
-# AUTH_URL="http://localhost:3000"  # for dev
-# AUTH_URL="https://your-production-domain.com"  # for prod
-
-# Elasticsearch
-ELASTICSEARCH_URL="http://localhost:9200"
-
-# Redis
-REDIS_URL="redis://localhost:6379"
-
-# AWS S3 Configuration (for seed_s3_from_gutendex.py and CloudFormation)
-AWS_ACCESS_KEY_ID=""
-AWS_SECRET_ACCESS_KEY="your-secret-access-key"
-AWS_DEFAULT_REGION="eu-west-1"
-AWS_S3_BUCKET="document-search-tenants"
-
-# Admin Interface Configuration (optional, for demo purposes)
-# Comma-separated list of tenant slugs to display in admin interface
-# If not set, all tenants are shown
-# Example: ADMIN_TENANTS_LIST="gutenberg,govdocs,alex-local"
-ADMIN_TENANTS_LIST=""
-```
-
-**Note**: 
-- Next.js automatically loads `.env` from the project root (configured in `next.config.ts`)
-- Prisma config files are updated to load from the root `.env` as well
-- Python scripts (seed_s3_from_gutendex.py, etc.) load from the root `.env` file
-- Use CloudFormation to create the bucket: `./infrastructure/deploy-s3.sh`
-- Make sure your AWS credentials have S3 and CloudFormation permissions
-
 ## Infrastructure
 
 ### S3 Bucket Setup
@@ -241,9 +689,95 @@ Deploy S3 bucket and folder structure using CloudFormation:
 
 See [infrastructure/README.md](./infrastructure/README.md) for detailed documentation.
 
-## API Documentation
+### CORS Configuration
 
-See [apps/web/README.md](./apps/web/README.md) for detailed API documentation.
+For S3 direct uploads from the web interface, CORS must be configured. See [docs/S3_CORS_SETUP.md](./docs/S3_CORS_SETUP.md) for details.
+
+## Troubleshooting
+
+### Node.js Version Issues
+
+If you see Prisma errors or build failures:
+```bash
+# Verify Node version
+node --version  # Must be v20.19.6
+
+# If using nvm, ensure correct version is active
+nvm use 20.19.6
+```
+
+### Database Connection Issues
+
+```bash
+# Check PostgreSQL is running
+docker compose ps postgres
+
+# Test connection
+psql postgresql://postgres:postgres@localhost:5432/docsearch
+```
+
+### Elasticsearch Not Responding
+
+```bash
+# Check Elasticsearch is running
+docker compose ps elasticsearch
+
+# Test connection
+curl http://localhost:9200
+```
+
+### Consumer Not Processing Messages
+
+1. **Check RabbitMQ queue**:
+   - Visit http://localhost:15672
+   - Go to "Queues" tab
+   - Check `doc_ingest` queue has messages
+
+2. **Check consumer logs** for errors
+
+3. **Verify Python dependencies**:
+   ```bash
+   cd workers/python
+   python test_setup.py
+   ```
+
+### Can't Login?
+
+- Verify database is seeded: `pnpm --filter web db:seed`
+- Check `.env` file has correct `DATABASE_URL`
+- Ensure Docker services are running
+
+### Search Not Working?
+
+- Check Elasticsearch is running: `curl http://localhost:9200`
+- Verify index exists for your tenant
+- Check browser console for errors
+
+### API Returns 403?
+
+- Verify you're logged in
+- Check user has access to the requested tenant
+- Platform admin can access all tenants, tenant users only their own
+
+### Build Errors
+
+- Ensure Node.js v20.19.6 is active
+- Run `pnpm install` to ensure all dependencies are installed
+- Check TypeScript strict mode is enabled (for production builds)
+
+For more troubleshooting, see [apps/web/README.md](./apps/web/README.md#troubleshooting).
+
+## Verification Checklist
+
+After setup, verify everything is working:
+
+- [ ] Node.js v20.19.6 is active (`node --version`)
+- [ ] Docker services are running (`docker compose ps`)
+- [ ] Database is seeded (can login with `admin@example.com`)
+- [ ] Web app is accessible at http://localhost:3000
+- [ ] Consumer is running and waiting for messages (if using ingestion)
+- [ ] RabbitMQ UI is accessible at http://localhost:15672
+- [ ] Elasticsearch is responding (`curl http://localhost:9200`)
 
 ## Development Commands
 
@@ -265,27 +799,17 @@ pnpm --filter web db:seed
 # Start dev server
 pnpm --filter web dev
 
-# Run from web directory
+# Build for production
 cd apps/web
-pnpm dev
+pnpm build
+
+# Start production server
+pnpm start
 ```
 
-## Troubleshooting
+## Additional Documentation
 
-### Can't login?
-- Verify database is seeded: `pnpm --filter web db:seed`
-- Check Docker services are running: `docker compose ps`
-- Verify `.env` file exists with correct `DATABASE_URL`
-
-### Search not working?
-- Check Elasticsearch is running: `curl http://localhost:9200`
-- Verify index exists for your tenant
-- Check browser console for errors
-
-### API returns 403?
-- Verify you're logged in
-- Check user has access to the requested tenant
-- Platform admin can access all tenants, tenant users only their own
-
-For more troubleshooting, see [apps/web/README.md](./apps/web/README.md#troubleshooting).
-
+- [apps/web/README.md](./apps/web/README.md) - Web application API documentation
+- [workers/python/README.md](./workers/python/README.md) - Python workers documentation
+- [infrastructure/README.md](./infrastructure/README.md) - Infrastructure setup
+- [docs/S3_CORS_SETUP.md](./docs/S3_CORS_SETUP.md) - S3 CORS configuration

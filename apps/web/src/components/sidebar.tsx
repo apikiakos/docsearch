@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { 
   Search, 
-  Settings, 
   LayoutDashboard 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -20,11 +19,6 @@ const navigation = [
     name: "Documents",
     href: "/documents",
     icon: Search,
-  },
-  {
-    name: "Settings",
-    href: "/dashboard/settings",
-    icon: Settings,
   },
 ];
 

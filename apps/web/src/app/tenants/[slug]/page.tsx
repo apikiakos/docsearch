@@ -147,7 +147,7 @@ export default async function TenantDetailPage(context: Context) {
             userRole={
               isPlatformAdmin 
                 ? "platform_admin" 
-                : (tenant.memberships.find((m: { user: { id: string } }) => m.user.id === session.user.id)?.role as "tenant_admin" | "tenant_user" || "tenant_user")
+                : (session?.user?.id ? (tenant.memberships.find((m: { user: { id: string } }) => m.user.id === session.user.id)?.role as "tenant_admin" | "tenant_user" || "tenant_user") : "tenant_user")
             }
           />
         </TabsContent>

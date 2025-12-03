@@ -338,11 +338,6 @@ export default function SearchPage() {
     }
   };
 
-  const handleAllowFuzzyChange = (checked: boolean) => {
-    setAllowFuzzy(checked);
-    // Don't trigger search automatically - only update the checkbox state
-    // User must click "Search" button to perform search
-  };
 
   const handleTenantChange = (newTenant: string) => {
     setTenant(newTenant);

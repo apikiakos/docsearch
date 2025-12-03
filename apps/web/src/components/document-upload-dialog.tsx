@@ -140,7 +140,6 @@ export function DocumentUploadDialog({
                   title: "Files already exist",
                   description: `The following files are already uploaded and were skipped: ${duplicateList}`,
                   variant: "destructive",
-                  duration: 5000, // Show for 5 seconds
                 });
                 
                 // Close the dialog and reset state

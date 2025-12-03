@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -8,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard,
   Search,
-  Settings,
   Building2,
   Users,
   FileText,
@@ -30,13 +30,13 @@ type NavSection = {
 
 const sectionColors: Record<string, string> = {
   Admin: "text-[#A78BFA]",
-  Documents: "text-[#34D399]",
+  Search: "text-[#34D399]",
   Assignment: "text-[#F59E0B]",
 };
 
 const bulletColors: Record<string, string> = {
   Admin: "bg-[#A78BFA]",
-  Documents: "bg-[#34D399]",
+  Search: "bg-[#34D399]",
   Assignment: "bg-[#F59E0B]",
 };
 
@@ -66,10 +66,10 @@ const baseNavSections: NavSection[] = [
     ],
   },
   {
-    label: "Documents",
+    label: "Search",
     items: [
       {
-        label: "Search",
+        label: "Documents",
         href: "/documents",
         icon: Search,
         disabled: false,
@@ -115,6 +115,22 @@ interface AdminSidebarProps {
 
 export function AdminSidebar({ user }: AdminSidebarProps) {
   const pathname = usePathname();
+  const [gitVersion, setGitVersion] = useState<string>("");
+  const [gitDate, setGitDate] = useState<string>("");
+  
+  // Fetch git version on mount
+  useEffect(() => {
+    fetch("/api/version")
+      .then((res) => res.json())
+      .then((data) => {
+        setGitVersion(data.version || "");
+        setGitDate(data.date || "");
+      })
+      .catch(() => {
+        setGitVersion("");
+        setGitDate("");
+      });
+  }, []);
   
   // Check if user is platform admin
   const isPlatformAdmin = user.memberships?.some(
@@ -220,9 +236,29 @@ export function AdminSidebar({ user }: AdminSidebarProps) {
       </ScrollArea>
 
       {/* Footer */}
-      <div className="border-t px-3 py-3 text-xs text-muted-foreground shrink-0">
-        <div>Logged in as</div>
-        <div className="font-medium">{user.name || user.email}</div>
+      <div className="border-t px-3 py-3 text-xs text-muted-foreground shrink-0 space-y-2">
+        <div>
+          <div>Logged in as</div>
+          <div className="font-medium">{user.name || user.email}</div>
+        </div>
+        {gitVersion && (
+          <div className="pt-2 border-t">
+            <div className="text-[10px] font-mono text-muted-foreground/70">
+              v{gitVersion}
+            </div>
+            {gitDate && (
+              <div className="text-[10px] text-muted-foreground/60 mt-0.5">
+                {new Date(gitDate).toLocaleString("en-US", {
+                  year: "numeric",
+                  month: "short",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </aside>
   );

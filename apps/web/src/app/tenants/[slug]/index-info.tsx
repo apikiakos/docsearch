@@ -327,7 +327,6 @@ export function IndexInfo({ tenantSlug, isPlatformAdmin = false }: IndexInfoProp
             variant="outline"
             onClick={() => {
               setDeleteDialogOpen(false);
-              setClearManifest(false);
             }}
             disabled={deleting}
           >

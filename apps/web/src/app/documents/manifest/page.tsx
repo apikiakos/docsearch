@@ -19,7 +19,7 @@ export default async function ManifestPage() {
     <div className="space-y-6">
       <PageHeader
         title="Documents Manifest"
-        description="View and manage all document manifest entries across all tenants"
+        subtitle="View and manage all document manifest entries across all tenants"
         breadcrumbs={[
           { label: "Dashboard", href: "/dashboard" },
           { label: "Documents", href: "/documents" },

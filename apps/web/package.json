@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && GIT_COMMIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo 'dev') GIT_COMMIT_DATE=$(git log -1 --format=%ci 2>/dev/null || echo '') next build",
     "start": "next start",
     "lint": "eslint",
     "ui:add": "PATH=\"$HOME/bin:$PATH\" shadcn add",
