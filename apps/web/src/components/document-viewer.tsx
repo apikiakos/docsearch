@@ -103,6 +103,22 @@ export function DocumentViewer({ content, metadata, filename, mimeType }: Docume
   // Check for both "s3" (from s3_producer) and "s3_upload" (from uploads_producer)
   const isS3Source = (source === "s3" || source === "s3_upload") && s3Key && tenantId;
   
+  // Debug S3 key extraction
+  if (source === "s3" || source === "s3_upload") {
+    console.log("[DocumentViewer] S3 Source Detection:", {
+      source,
+      s3Key,
+      tenantId,
+      isS3Source,
+      hasExtras: !!extras,
+      extrasS3Key: extras?.s3_key,
+      metadataExtrasS3Key: metadata?.extras && typeof metadata.extras === "object" ? (metadata.extras as Record<string, unknown>)?.s3_key : undefined,
+      metadataS3Key: metadata?.s3_key,
+      originalUrl,
+      sourceUrl,
+    });
+  }
+  
   // For local files, construct API route URL
   // Use source_url if available, otherwise fall back to originalUrl for local files
   const localFilePath = sourceUrl || (source === "local_folder" && originalUrl && !originalUrl.startsWith("http") ? originalUrl : null);
