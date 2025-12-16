@@ -8,6 +8,8 @@ export const redis =
   globalForRedis.redis ??
   new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
     maxRetriesPerRequest: null,
+    enableOfflineQueue: false,
+    lazyConnect: true,
   });
 
 if (process.env.NODE_ENV !== "production") {
@@ -33,7 +35,7 @@ export function getRateLimitKey(tenantId: string, userId?: string): string {
 
 /**
  * Check rate limit (simple fixed window)
- * Uses Lua script for atomic increment + TTL setting to prevent race conditions
+ * Uses Lua script for atomic increment + TTL setting
  * Returns true if allowed, false if rate limited
  */
 const rateLimitScript = `
@@ -52,18 +54,18 @@ export async function checkRateLimit(
   limit: number = 100,
   windowSeconds: number = 60
 ): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
-  // Use Lua script for atomic increment + TTL setting
-  const result = await redis.eval(
+  await redis.connect().catch(() => {});
+
+  const result = (await redis.eval(
     rateLimitScript,
-    1, // number of keys
-    key, // KEYS[1]
-    windowSeconds.toString() // ARGV[1]
-  ) as [number, number]; // [current, ttl]
+    1,
+    key,
+    windowSeconds.toString()
+  )) as [number, number];
 
   const current = result[0];
   const ttl = result[1];
 
-  // Calculate reset time: if TTL is valid, use it; otherwise use windowSeconds
   const resetAt = Date.now() + (ttl > 0 ? ttl * 1000 : windowSeconds * 1000);
   const remaining = Math.max(0, limit - current);
 
@@ -73,4 +75,3 @@ export async function checkRateLimit(
     resetAt,
   };
 }
-

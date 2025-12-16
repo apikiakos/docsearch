@@ -167,7 +167,7 @@ The PrismaClient is configured with the adapter in:
 If `prisma migrate dev` times out with advisory lock errors:
 - Use `pnpm db:push` instead for prototype development
 - For production, ensure no other Prisma processes are running
-- Clear advisory locks: `docker exec docsearch-postgres psql -U postgres -d docsearch -c "SELECT pg_advisory_unlock_all();"`
+- Clear advisory locks: `docker exec platform-postgres psql -U postgres -d docsearch -c "SELECT pg_advisory_unlock_all();"`
 
 ### Prisma 7 Adapter Errors
 
@@ -180,4 +180,4 @@ If you see errors about missing adapter:
 
 - Verify Docker services are running: `docker compose ps`
 - Check PostgreSQL logs: `docker compose logs postgres`
-- Test connection: `docker exec docsearch-postgres psql -U postgres -d docsearch -c "SELECT 1;"`
+- Test connection: `docker exec platform-postgres psql -U postgres -d docsearch -c "SELECT 1;"`

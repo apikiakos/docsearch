@@ -1,0 +1,30 @@
+services:
+  docsearch-web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        DATABASE_URL: "postgresql://postgres:postgres@platform-postgres:5432/docsearch?schema=public"
+    container_name: docsearch-web
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - edge
+      - internal
+  docsearch-api:
+    build:
+      context: .
+      dockerfile: workers/python/Dockerfile
+    container_name: docsearch-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - internal
+
+networks:
+  edge:
+    external: true
+  internal:
+    external: true
