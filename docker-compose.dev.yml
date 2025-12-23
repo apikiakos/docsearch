@@ -3,7 +3,7 @@ version: "3.8"
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: docsearch-postgres
+    container_name: platform-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -20,7 +20,7 @@ services:
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
-    container_name: docsearch-elasticsearch
+    container_name: platform-elasticsearch
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
@@ -39,7 +39,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: docsearch-redis
+    container_name: platform-redis
     ports:
       - "6379:6379"
     volumes:
@@ -51,7 +51,7 @@ services:
       retries: 5
 
   rabbitmq:
-    container_name: docsearch-rabbitmq
+    container_name: platform-rabbitmq
     image: rabbitmq:3-management
     ports:
       - "5672:5672"
