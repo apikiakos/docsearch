@@ -1,30 +1,109 @@
+version: '3.8'
+
+# ============================================================================
+# DOCSEARCH - APPLICATION SERVICES ONLY
+# ============================================================================
+# This file contains only application services. Infrastructure (postgres, redis,
+# elasticsearch, rabbitmq) is provided by vps-infra/compose/infra.compose.yml
+# 
+# For local development, use docker-compose.dev.yml which includes infrastructure.
+# For production VPS, this file is included by vps-infra/compose/apps.compose.yml
+# ============================================================================
+
 services:
+  # ============================================================================
+  # NEXT.JS WEB APP
+  # ============================================================================
+  
   docsearch-web:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-      args:
-        DATABASE_URL: "postgresql://postgres:postgres@platform-postgres:5432/docsearch?schema=public"
     container_name: docsearch-web
     restart: unless-stopped
-    env_file:
-      - .env
+    environment:
+      # Database (using platform-postgres)
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@platform-postgres:5432/docsearch?schema=public
+      
+      # Redis (using platform-redis)
+      REDIS_URL: redis://platform-redis:6379
+      
+      # Elasticsearch (using platform-elasticsearch)
+      ELASTICSEARCH_URL: http://platform-elasticsearch:9200
+      
+      # NextAuth
+      NEXTAUTH_URL: https://docsearch.artsbuilder.com
+      NEXTAUTH_SECRET: ${DOCSEARCH_NEXTAUTH_SECRET:-${NEXTAUTH_SECRET:-}}
+      NEXTAUTH_URL_INTERNAL: http://docsearch-web:3020
+      
+      # App Configuration
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3020
     networks:
       - edge
       - internal
+    ports:
+      - "3020:3020"
+    depends_on:
+      platform-postgres:
+        condition: service_healthy
+      platform-redis:
+        condition: service_healthy
+      platform-elasticsearch:
+        condition: service_healthy
+      docsearch-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3020/api/healthz', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================================
+  # FASTAPI SERVICE
+  # ============================================================================
+  
   docsearch-api:
     build:
       context: .
       dockerfile: workers/python/Dockerfile
     container_name: docsearch-api
     restart: unless-stopped
-    env_file:
-      - .env
+    environment:
+      # Database (using platform-postgres)
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@platform-postgres:5432/docsearch?schema=public
+      
+      # Elasticsearch (using platform-elasticsearch)
+      ELASTICSEARCH_URL: http://platform-elasticsearch:9200
+      
+      # RabbitMQ (using platform-rabbitmq)
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASS:-guest}@platform-rabbitmq:5672/%2F
+      RABBITMQ_QUEUE_NAME: doc_ingest
+      
+      # App Configuration
+      FASTAPI_PORT: 3021
+      FASTAPI_HOST: 0.0.0.0
     networks:
       - internal
+    ports:
+      - "3021:3021"
+    depends_on:
+      platform-postgres:
+        condition: service_healthy
+      platform-elasticsearch:
+        condition: service_healthy
+      platform-rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:3021/health').raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 networks:
   edge:
     external: true
+    name: edge
   internal:
     external: true
+    name: internal
