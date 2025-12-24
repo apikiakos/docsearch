@@ -223,13 +223,22 @@ log_info "Starting Caddy if not running..."
 ssh "${VPS_USER}@${VPS_HOST}" "
   set -e
   cd ${VPS_INFRA_PATH}
-  # Start Caddy if not running
-  docker compose -f compose/caddy.compose.yml up -d --remove-orphans caddy || true
+  # Use consistent project name and all compose files
+  export COMPOSE_PROJECT_NAME=platform
+  docker compose \
+    -f compose/infra.compose.yml \
+    -f compose/apps.compose.yml \
+    -f compose/caddy.compose.yml \
+    up -d caddy
   sleep 3
   # Reload Caddy to discover new containers
   docker exec caddy caddy reload --config /etc/caddy/Caddyfile 2>&1 || {
     echo '⚠️  Caddy reload failed, restarting...'
-    docker compose -f compose/caddy.compose.yml restart caddy
+    docker compose \
+      -f compose/infra.compose.yml \
+      -f compose/apps.compose.yml \
+      -f compose/caddy.compose.yml \
+      restart caddy
     sleep 3
   }
 " || log_warn "Caddy reload failed, but continuing..."
