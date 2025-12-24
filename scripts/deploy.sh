@@ -114,9 +114,8 @@ log_info "Ensuring infrastructure services are running..."
 ssh "${VPS_USER}@${VPS_HOST}" "
   set -e
   cd ${VPS_INFRA_PATH}
-  # Use consistent project name and all compose files
-  export COMPOSE_PROJECT_NAME=platform
-  docker compose \
+  # Use explicit project name and all compose files
+  docker compose -p platform \
     -f compose/infra.compose.yml \
     -f compose/apps.compose.yml \
     -f compose/caddy.compose.yml \
@@ -131,8 +130,7 @@ ssh "${VPS_USER}@${VPS_HOST}" "
   set -e
   cd ${VPS_INFRA_PATH}
   # Build migration image (has packages/db, Prisma CLI)
-  export COMPOSE_PROJECT_NAME=platform
-  docker compose \
+  docker compose -p platform \
     -f compose/infra.compose.yml \
     -f compose/apps.compose.yml \
     -f compose/caddy.compose.yml \
@@ -144,8 +142,7 @@ ssh "${VPS_USER}@${VPS_HOST}" "
   set -e
   cd ${VPS_INFRA_PATH}
   # Run migrations using the migration service (one-shot container)
-  export COMPOSE_PROJECT_NAME=platform
-  docker compose \
+  docker compose -p platform \
     -f compose/infra.compose.yml \
     -f compose/apps.compose.yml \
     -f compose/caddy.compose.yml \
@@ -161,17 +158,16 @@ case "$TARGET" in
         ssh "${VPS_USER}@${VPS_HOST}" "
             set -e
             cd ${VPS_INFRA_PATH}
-            export COMPOSE_PROJECT_NAME=platform
-            docker compose \
+            docker compose -p platform \
               -f compose/infra.compose.yml \
               -f compose/apps.compose.yml \
               -f compose/caddy.compose.yml \
               build docsearch-web
-            docker compose \
+            docker compose -p platform \
               -f compose/infra.compose.yml \
               -f compose/apps.compose.yml \
               -f compose/caddy.compose.yml \
-              up -d docsearch-web
+              up -d --no-build docsearch-web
         " || log_error "Failed to deploy web"
     ;;
   api)
@@ -179,17 +175,16 @@ case "$TARGET" in
         ssh "${VPS_USER}@${VPS_HOST}" "
             set -e
             cd ${VPS_INFRA_PATH}
-            export COMPOSE_PROJECT_NAME=platform
-            docker compose \
+            docker compose -p platform \
               -f compose/infra.compose.yml \
               -f compose/apps.compose.yml \
               -f compose/caddy.compose.yml \
               build docsearch-api
-            docker compose \
+            docker compose -p platform \
               -f compose/infra.compose.yml \
               -f compose/apps.compose.yml \
               -f compose/caddy.compose.yml \
-              up -d docsearch-api
+              up -d --no-build docsearch-api
         " || log_error "Failed to deploy api"
     ;;
   all)
@@ -197,17 +192,16 @@ case "$TARGET" in
         ssh "${VPS_USER}@${VPS_HOST}" "
             set -e
             cd ${VPS_INFRA_PATH}
-            export COMPOSE_PROJECT_NAME=platform
-            docker compose \
+            docker compose -p platform \
               -f compose/infra.compose.yml \
               -f compose/apps.compose.yml \
               -f compose/caddy.compose.yml \
               build docsearch-web docsearch-api
-            docker compose \
+            docker compose -p platform \
               -f compose/infra.compose.yml \
               -f compose/apps.compose.yml \
               -f compose/caddy.compose.yml \
-              up -d docsearch-web docsearch-api
+              up -d --no-build docsearch-web docsearch-api
         " || log_error "Failed to deploy apps"
     ;;
   *)
@@ -223,9 +217,8 @@ log_info "Starting Caddy if not running..."
 ssh "${VPS_USER}@${VPS_HOST}" "
   set -e
   cd ${VPS_INFRA_PATH}
-  # Use consistent project name and all compose files
-  export COMPOSE_PROJECT_NAME=platform
-  docker compose \
+  # Always use explicit project name and all compose files to avoid removing unrelated containers
+  docker compose -p platform \
     -f compose/infra.compose.yml \
     -f compose/apps.compose.yml \
     -f compose/caddy.compose.yml \
@@ -234,7 +227,7 @@ ssh "${VPS_USER}@${VPS_HOST}" "
   # Reload Caddy to discover new containers
   docker exec caddy caddy reload --config /etc/caddy/Caddyfile 2>&1 || {
     echo '⚠️  Caddy reload failed, restarting...'
-    docker compose \
+    docker compose -p platform \
       -f compose/infra.compose.yml \
       -f compose/apps.compose.yml \
       -f compose/caddy.compose.yml \
