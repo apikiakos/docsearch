@@ -48,6 +48,7 @@ ENV PATH="/repo/node_modules/.bin:$PATH"
 
 # Default command for migration image
 # Use pnpm exec to find Prisma CLI in workspace, with explicit schema path from repo root
+# This ensures Prisma CLI is found in the workspace node_modules, not packages/db/node_modules
 CMD ["pnpm", "-w", "--filter", "@docsearch/db", "exec", "prisma", "migrate", "deploy", "--schema=packages/db/prisma/schema.prisma"]
 
 # ---- Build Web App ----

@@ -91,14 +91,15 @@ fi
 
 # Step 3: Pull latest code on VPS
 log_section "Step 3: Pulling Latest Code on VPS"
-log_info "Pulling DocSearch..."
+log_info "Updating DocSearch code on VPS..."
 ssh "${VPS_USER}@${VPS_HOST}" "
   set -e
   cd ${VPS_REPO_PATH}
-  git stash || true
-  git pull origin main
-  git stash pop || true
-" || log_error "Failed to pull code on VPS"
+  # Use fetch + reset --hard for idempotent, conflict-free updates
+  git fetch origin main
+  git reset --hard origin/main
+  git clean -fd
+" || log_error "Failed to update code on VPS"
 
 # Step 4: Setup networks (via vps-infra)
 log_section "Step 4: Setting Up Infrastructure"
