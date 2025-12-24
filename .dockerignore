@@ -1,0 +1,21 @@
+node_modules
+.next
+dist
+.git
+.env
+.env.local
+.env*.local
+*.log
+.DS_Store
+.vscode
+.idea
+coverage
+.turbo
+
+# IMPORTANT: Do NOT ignore Prisma schema and migrations
+# These are required for migration containers
+!packages/db/prisma/**
+!packages/db/prisma/schema.prisma
+!packages/db/prisma/migrations/**
+!packages/db/prisma/seed.ts
+
