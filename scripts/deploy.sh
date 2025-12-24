@@ -174,8 +174,25 @@ case "$TARGET" in
     ;;
 esac
 
-# Step 8: Verify deployment
-log_section "Step 7: Verifying Deployment"
+# Step 8: Ensure Caddy is running and reload it
+log_section "Step 7: Ensuring Caddy is Running"
+log_info "Starting Caddy if not running..."
+ssh "${VPS_USER}@${VPS_HOST}" "
+  set -e
+  cd ${VPS_INFRA_PATH}
+  # Start Caddy if not running
+  docker compose -f compose/caddy.compose.yml up -d --remove-orphans caddy || true
+  sleep 3
+  # Reload Caddy to discover new containers
+  docker exec caddy caddy reload --config /etc/caddy/Caddyfile 2>&1 || {
+    echo '⚠️  Caddy reload failed, restarting...'
+    docker compose -f compose/caddy.compose.yml restart caddy
+    sleep 3
+  }
+" || log_warn "Caddy reload failed, but continuing..."
+
+# Step 9: Verify deployment
+log_section "Step 8: Verifying Deployment"
 log_info "Waiting for services to start..."
 sleep 10
 
