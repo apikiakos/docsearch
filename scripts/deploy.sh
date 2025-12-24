@@ -114,21 +114,41 @@ log_info "Ensuring infrastructure services are running..."
 ssh "${VPS_USER}@${VPS_HOST}" "
   set -e
   cd ${VPS_INFRA_PATH}
-  docker compose -f compose/infra.compose.yml up -d --remove-orphans \
-    platform-postgres \
-    platform-redis \
-    platform-elasticsearch || true
+  # Use consistent project name and all compose files
+  export COMPOSE_PROJECT_NAME=platform
+  docker compose \
+    -f compose/infra.compose.yml \
+    -f compose/apps.compose.yml \
+    -f compose/caddy.compose.yml \
+    up -d platform-postgres platform-redis platform-elasticsearch
   sleep 5
 " || log_error "Failed to start infrastructure"
 
 # Step 6: Run migrations (one-shot Docker container)
 log_section "Step 5: Running Database Migrations"
+log_info "Building migration image..."
+ssh "${VPS_USER}@${VPS_HOST}" "
+  set -e
+  cd ${VPS_INFRA_PATH}
+  # Build migration image (has packages/db, Prisma CLI)
+  export COMPOSE_PROJECT_NAME=platform
+  docker compose \
+    -f compose/infra.compose.yml \
+    -f compose/apps.compose.yml \
+    -f compose/caddy.compose.yml \
+    build docsearch-migrate || echo '⚠️  Migration image build failed'
+" || log_warn "Migration image build may have failed"
+
 log_info "Running Prisma migrations in one-shot Docker container..."
 ssh "${VPS_USER}@${VPS_HOST}" "
   set -e
   cd ${VPS_INFRA_PATH}
   # Run migrations using the migration service (one-shot container)
-  docker compose -f compose/infra.compose.yml -f compose/apps.compose.yml \
+  export COMPOSE_PROJECT_NAME=platform
+  docker compose \
+    -f compose/infra.compose.yml \
+    -f compose/apps.compose.yml \
+    -f compose/caddy.compose.yml \
     --profile migrate run --rm docsearch-migrate || echo '⚠️  Migrations may have failed or already applied'
 " || log_warn "Migrations may have failed or already applied"
 
@@ -137,35 +157,58 @@ log_section "Step 6: Building and Deploying Apps"
 
 case "$TARGET" in
   web)
-    log_info "Building and deploying docsearch-web..."
-    ssh "${VPS_USER}@${VPS_HOST}" "
-      set -e
-      cd ${VPS_INFRA_PATH}
-      docker compose -f compose/infra.compose.yml -f compose/apps.compose.yml build docsearch-web
-      docker compose -f compose/infra.compose.yml -f compose/apps.compose.yml up -d --remove-orphans docsearch-web
-    " || log_error "Failed to deploy web"
+        log_info "Building and deploying docsearch-web..."
+        ssh "${VPS_USER}@${VPS_HOST}" "
+            set -e
+            cd ${VPS_INFRA_PATH}
+            export COMPOSE_PROJECT_NAME=platform
+            docker compose \
+              -f compose/infra.compose.yml \
+              -f compose/apps.compose.yml \
+              -f compose/caddy.compose.yml \
+              build docsearch-web
+            docker compose \
+              -f compose/infra.compose.yml \
+              -f compose/apps.compose.yml \
+              -f compose/caddy.compose.yml \
+              up -d docsearch-web
+        " || log_error "Failed to deploy web"
     ;;
   api)
-    log_info "Building and deploying docsearch-api..."
-    ssh "${VPS_USER}@${VPS_HOST}" "
-      set -e
-      cd ${VPS_INFRA_PATH}
-      docker compose -f compose/infra.compose.yml -f compose/apps.compose.yml build docsearch-api
-      docker compose -f compose/infra.compose.yml -f compose/apps.compose.yml up -d --remove-orphans docsearch-api
-    " || log_error "Failed to deploy api"
+        log_info "Building and deploying docsearch-api..."
+        ssh "${VPS_USER}@${VPS_HOST}" "
+            set -e
+            cd ${VPS_INFRA_PATH}
+            export COMPOSE_PROJECT_NAME=platform
+            docker compose \
+              -f compose/infra.compose.yml \
+              -f compose/apps.compose.yml \
+              -f compose/caddy.compose.yml \
+              build docsearch-api
+            docker compose \
+              -f compose/infra.compose.yml \
+              -f compose/apps.compose.yml \
+              -f compose/caddy.compose.yml \
+              up -d docsearch-api
+        " || log_error "Failed to deploy api"
     ;;
   all)
-    log_info "Building and deploying all DocSearch apps..."
-    ssh "${VPS_USER}@${VPS_HOST}" "
-      set -e
-      cd ${VPS_INFRA_PATH}
-      docker compose -f compose/infra.compose.yml -f compose/apps.compose.yml build \
-        docsearch-web \
-        docsearch-api
-      docker compose -f compose/infra.compose.yml -f compose/apps.compose.yml up -d --remove-orphans \
-        docsearch-web \
-        docsearch-api
-    " || log_error "Failed to deploy apps"
+        log_info "Building and deploying all DocSearch apps..."
+        ssh "${VPS_USER}@${VPS_HOST}" "
+            set -e
+            cd ${VPS_INFRA_PATH}
+            export COMPOSE_PROJECT_NAME=platform
+            docker compose \
+              -f compose/infra.compose.yml \
+              -f compose/apps.compose.yml \
+              -f compose/caddy.compose.yml \
+              build docsearch-web docsearch-api
+            docker compose \
+              -f compose/infra.compose.yml \
+              -f compose/apps.compose.yml \
+              -f compose/caddy.compose.yml \
+              up -d docsearch-web docsearch-api
+        " || log_error "Failed to deploy apps"
     ;;
   *)
     log_error "Invalid target: $TARGET"
