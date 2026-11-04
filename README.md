@@ -131,7 +131,7 @@ pnpm --version  # Should be >= 9.7.0
 
    For AWS S3 features (required for S3 producers):
    ```env
-   AWS_ACCESS_KEY_ID="your-access-key-id"
+   AWS_ACCESS_KEY_ID=""
    AWS_SECRET_ACCESS_KEY="your-secret-access-key"
    AWS_DEFAULT_REGION="eu-west-1"
    AWS_S3_BUCKET="document-search-tenants"
@@ -465,7 +465,7 @@ RABBITMQ_URL="amqp://guest:guest@localhost:5672/%2F"
 RABBITMQ_QUEUE_NAME="doc_ingest"
 
 # AWS S3 Configuration (for S3 producers and document uploads)
-AWS_ACCESS_KEY_ID="your-access-key-id"
+AWS_ACCESS_KEY_ID=""
 AWS_SECRET_ACCESS_KEY="your-secret-access-key"
 AWS_DEFAULT_REGION="eu-west-1"
 AWS_S3_BUCKET="document-search-tenants"
